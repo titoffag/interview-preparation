@@ -1,8 +1,12 @@
-Compose
+Compose + 011
+Event Emitter + 016
+Throttle +
+Debounce +
 Custom bind
-Promise.all, Promise.race, Promise.any, Promise.allSettled
-event emitter +
 
-throttle
-debounce +
 setTimeout
+
+Promise.all
+Promise.race
+Promise.any
+Promise.allSettled

@@ -1,7 +1,6 @@
-- виджет карусели
-- 5-стар виджет
-- прогресс бар
-- dnd
-- 3d webgl product viewer
-
-publish to npm registry
+- date picker
+- carousel widget
+- five-star widget
+- progress bar
+- dnd component
+- 3d WebGL product viewer
