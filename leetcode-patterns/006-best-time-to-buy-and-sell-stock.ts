@@ -27,3 +27,18 @@ function maxProfit2(prices: number[]): number {
     
     return sell;
 };
+
+function maxProfitWithFee(prices: number[], fee: number): number {
+    let buy = -Infinity,
+        sell = 0;
+    
+    for (const price of prices) {
+        const next_buy = Math.max(buy, sell - (price + fee));
+        const next_sell = Math.max(sell, buy + price);
+        
+        buy = next_buy;
+        sell = next_sell;
+    }
+    
+    return sell;
+};
