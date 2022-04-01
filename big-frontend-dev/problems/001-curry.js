@@ -1,6 +1,6 @@
 function curry(fn) {
-  return function curryInner(...args) {
+  return function curried(...args) {
     if (args.length >= fn.length) return fn(...args);
-    return (...args2) => curryInner(...args, ...args2);
+    return (...args2) => curried(...args, ...args2);
   };
 }
