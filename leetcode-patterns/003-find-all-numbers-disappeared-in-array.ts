@@ -15,6 +15,7 @@ function findDisappearedNumbers(nums: number[]): number[] {
     if (cur !== i + 1) {
       miss.push(i + 1);
     }
+
     return miss;
   }, []);
 }

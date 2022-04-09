@@ -5,6 +5,7 @@ function climbStairs(n: number): number {
 
   let n1 = 1, n2 = 2;
 
+  // Dp[n] = Dp[n-1] + Dp[n-2]
   for (let i = 3; i <= n; i++) {
     [n1, n2] = [n2, n1 + n2];
   }

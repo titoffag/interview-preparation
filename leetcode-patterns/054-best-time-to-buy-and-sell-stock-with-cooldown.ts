@@ -1,4 +1,4 @@
-function maxProfit(prices: number[]): number {
+function maxProfitWithCooldown(prices: number[]): number {
   let buy = -Infinity,
     sell = 0,
     cooldown = 0;
