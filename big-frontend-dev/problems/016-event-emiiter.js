@@ -13,13 +13,8 @@ class EventEmitter {
 
     return {
       release: () => {
-        if (!this.#listeners.has(eventName)) {
-          return;
-        }
-
-        const callbacks = this.#listeners.get(eventName);
         const indexToRemove = callbacks.indexOf(callback);
-        if (indexToRemove < 0) {
+        if (indexToRemove === -1) {
           return;
         }
 
@@ -33,7 +28,7 @@ class EventEmitter {
 
   emit(eventName, ...args) {
     const callbacks = this.#listeners.get(eventName);
-    if (callbacks?.length === 0) {
+    if (!callbacks || callbacks?.length === 0) {
       return;
     }
 

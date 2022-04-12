@@ -1,4 +1,4 @@
-import { TreeNode } from "000-tree-node";
+import { TreeNode } from "./000-tree-node";
 
 function isSameTree(p: TreeNode | null, q:TreeNode | null) {
     if (!p && !q) {
