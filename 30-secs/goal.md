@@ -1,6 +1,0 @@
-- date picker
-- carousel widget
-- five-star widget
-- progress bar
-- dnd component
-- 3d WebGL product viewer

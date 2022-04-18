@@ -1,4 +1,4 @@
-import { TreeNode } from "000-tree-node";
+import { TreeNode } from "./000-tree-node";
 
 function mergeTrees(node1: TreeNode | null, node2: TreeNode | null): TreeNode | null {
     if (!node1) {

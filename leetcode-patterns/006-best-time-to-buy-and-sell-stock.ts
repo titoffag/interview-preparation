@@ -9,7 +9,6 @@ function maxProfit(prices: number[]): number {
         currentMin = Math.min(currentMin, price);
     }
     
-    
     return maxProfit;
 };
 

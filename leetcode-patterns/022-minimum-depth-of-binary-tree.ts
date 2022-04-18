@@ -1,4 +1,4 @@
-import { TreeNode } from "000-tree-node";
+import { TreeNode } from "./000-tree-node";
 
 function minDepth(root: TreeNode | null): number {
     if (!root) {
@@ -6,17 +6,15 @@ function minDepth(root: TreeNode | null): number {
     }
     
     let depth = 0;
-    let node;
     const q = [root];
     
     while (q.length) {
         let n = q.length;
         for (let i = 0; i < n; i++) {
-            node = q.shift();
+            const node = q.shift();
             
             if (!node.left && !node.right) {
-                depth += 1;
-                return depth;
+                return depth + 1;
             }
             
             if (node.left) {

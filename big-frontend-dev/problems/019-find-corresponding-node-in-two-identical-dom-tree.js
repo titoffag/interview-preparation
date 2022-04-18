@@ -1,4 +1,4 @@
-// Approach 1: Recursive
+// Approach 1: Recursive DFS
 const findCorrespondingNode = (rootA, rootB, target) => {
   if (rootA === target) {
     return rootB;

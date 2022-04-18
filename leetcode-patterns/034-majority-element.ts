@@ -22,16 +22,16 @@ function majorityElement2(nums: number[]): number {
 }
 
 function majorityElement3(nums: number[]): number {
-  const m = {};
+  const occurrence = new Map();
   const halfOfN = Math.floor(nums.length / 2);
 
   for (const num of nums) {
-    m[num] = m[num] ? m[num] + 1 : 1;
+    occurrence.set(num, occurrence.has(num) ? occurrence.get(num) + 1 : 1);
   }
 
-  for (const k of Object.keys(m)) {
-    if (m[k] > halfOfN) {
-      return +k;
+  for (const [num, frequency] of occurrence) {
+    if (frequency > halfOfN) {
+      return num;
     }
   }
 
@@ -70,7 +70,7 @@ function findMajorityOnInterval(
   const leftCount = count(nums, leftMajority, from, to);
   const rightCount = count(nums, rightMajority, from, to);
 
-  return leftCount > rightCount ? leftCount : rightCount;
+  return leftCount > rightCount ? leftMajority : rightMajority;
 }
 
 function majorityElement4(nums: number[]): number {

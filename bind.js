@@ -1,4 +1,3 @@
-// Реализовать метод bind
 function bind(func, context, ...bindArgs) {
   return function (...fnArgs) {
     return func.apply(context, bindArgs.concat(fnArgs));
@@ -10,7 +9,7 @@ let foo = function (...args) {
 }
 
 let bar = bind(foo, { a: 1 });
-console.log(bar([1, 2, 3])); //{a: 1}, [1, 2, 3]
+console.log(bar([1, 2, 3])); // {a: 1}, [1, 2, 3]
 
 Function.prototype.myBind = function (context, ...args) {
   return (...rest) => {
@@ -24,4 +23,4 @@ function log(...props) {
 
 const obj = { name: 'Vladilen', age: 28 }
 
-log.myBind(obj, 1, 2)()
+log.myBind(obj, 1, 2)() // 'Vladilen' 28 { name: 'Vladilen', age: 28 } 1 2

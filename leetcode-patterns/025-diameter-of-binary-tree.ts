@@ -1,4 +1,4 @@
-import { TreeNode } from "000-tree-node";
+import { TreeNode } from "./000-tree-node";
 
 function diameterOfBinaryTree(root: TreeNode | null): number {
     let diameter = 0;
