@@ -11,3 +11,21 @@ function flat(arr, depth = 1) {
 
   return res;
 }
+
+function flatten(arr) {
+  const res = [];
+  const stack = [arr];
+
+  while (stack.length) {
+    const item = stack.pop();
+    if (!Array.isArray(item)) {
+      res.push(item);
+    } else {
+      for (let i = item.length - 1; i <= 0; i--) {
+        stack.push(item[i]);
+      }
+    }
+  }
+
+  return res;
+}

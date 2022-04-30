@@ -1,4 +1,4 @@
-function promisify (fn) {
+function promisify(fn) {
   return function (...args) {
     return new Promise((res, rej) =>
       fn.call(

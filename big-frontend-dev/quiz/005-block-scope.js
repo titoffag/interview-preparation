@@ -22,3 +22,26 @@ for (let i = 0; i < 5; i++) {
 // let variables will be bound to the value from only that iteration of the loop, 
 // whereas var variables will be the current value of the variable, 
 // which at that point of the settimeout it is 5, hence it prints.
+
+function test() {
+  for (var i = 0; i < 5; i++) {
+    const closureFn = function (j) {
+      console.log(j);
+    };
+    setTimeout(closureFn(i), 1_000);
+  }
+}
+
+function test2() {
+  for (var i = 0; i < 5; i++) {
+    const boundedFn = (function () {
+      console.log(this);
+    }).bind(i);
+    setTimeout(boundedFn, 1_000);
+  }
+}
+
+console.log('-- test --');
+test();
+console.log('-- test2 --');
+test2();

@@ -1,8 +1,8 @@
 const required = (val) => {
   return val === ""
     ? {
-        required: "field is required",
-      }
+      required: "field is required",
+    }
     : null;
 };
 
@@ -23,7 +23,7 @@ class FormModel {
     const errors = field.validators
       .map((validator) => {
         const result = validator(field.value);
-        this.fields[fieldName].errors[validator.name] = result,
+        this.fields[fieldName].errors[validator.name] = result;
         return result;
       })
       .filter(Boolean);

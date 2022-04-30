@@ -1,4 +1,29 @@
 function throttle(func, wait) {
+  let isThrottled = false,
+    stashed = null;
+
+  function wrapper() {
+    if (isThrottled) {
+      stashed = [this, arguments];
+      return;
+    }
+
+    func.apply(this, arguments);
+    isThrottled = true;
+
+    setTimeout(() => {
+      isThrottled = false;
+      if (stashed) {
+        func.apply(...stashed);
+        stashed = null;
+      }
+    }, wait);
+  }
+
+  return wrapper;
+}
+
+function throttleAlt(func, wait) {
   let timer = null, stashed = null;
 
   const startCooling = () => {
@@ -24,7 +49,7 @@ function throttle(func, wait) {
   }
 }
 
-function throttleAlt(func, wait) {
+function throttleAlt2(func, wait) {
   let timer = null, lastArgs = [];
 
   return function throttledFunc(...args) {

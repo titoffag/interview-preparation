@@ -1,0 +1,21 @@
+.star-rating {
+  display: inline-flex;
+  flex-direction: row;
+  height: 2rem;
+}
+
+.star {
+  display: inline-block;
+}
+
+.star::before {
+  display: inline-block;
+  padding: 0 0 .25rem;
+  font-size: 1.5rem;
+  content: '★';
+  color: rgba(0, 0, 0, .1);
+}
+
+.star.star--active::before {
+  color: #3c74ff;
+}

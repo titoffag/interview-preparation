@@ -14,7 +14,7 @@ const findCorrespondingNode = (rootA, rootB, target) => {
 }
 
 //Approach 2: Iterative DFS: Using stack
-const findCorrespondingNode = (rootA, rootB, target) => {
+const findCorrespondingNodeAlt2 = (rootA, rootB, target) => {
   const stack = [[rootA, rootB]];
 
   while (stack.length) {
@@ -31,7 +31,7 @@ const findCorrespondingNode = (rootA, rootB, target) => {
 }
 
 // Approach 3: Iterative BFS: Using Queue
-const findCorrespondingNode = (rootA, rootB, target) => {
+const findCorrespondingNodeAlt3 = (rootA, rootB, target) => {
   if (rootA === target) {
     return rootB;
   }
@@ -53,7 +53,7 @@ const findCorrespondingNode = (rootA, rootB, target) => {
 }
 
 // Approach 4: Using DOM API
-const findCorrespondingNode = (rootA, rootB, target) => {
+const findCorrespondingNodeAlt4 = (rootA, rootB, target) => {
   if (rootA === target) {
     return rootB;
   }
@@ -79,7 +79,7 @@ function getRootPath(root, target) {
 }
 
 // Approach 5: Using Tree Walker API
-const findCorrespondingNode = (rootA, rootB, target) => {
+const findCorrespondingNodeAlt5 = (rootA, rootB, target) => {
   const rootAWalker = document.createTreeWalker(rootA, NodeFilter.SHOW_ELEMENT);
   const rootBWalker = document.createTreeWalker(rootB, NodeFilter.SHOW_ELEMENT);
 

@@ -1,22 +1,25 @@
 Compose + 011
 Event Emitter + 016
-Throttle +
-Debounce +
-Custom bind
+Throttle + 004/005
+Debounce + 006/007
+Custom bind +
 
-setTimeout
+setTimeout ?
 
-Promise.all
-Promise.race
-Promise.any
-Promise.allSettled
+Promise +
+Promise.all ?
+Promise.race ?
+Promise.any ?
+Promise.allSettled ?
 
-- date picker
-- carousel widget
-- five-star widget
-- progress bar
-- dnd component
-- 3d WebGL product viewer
+- date picker ?
+- carousel widget +
+- five-star widget +
+- progress bar ?
+- dnd component ?
+- 3d WebGL product viewer ?
 
-80 easy
-20 medium
+80 easy / 34 +
+20 medium / 3 +
+
+stuff - need to folder restructure

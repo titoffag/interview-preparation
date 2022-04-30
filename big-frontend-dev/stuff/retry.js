@@ -8,7 +8,7 @@ function retry(fn, timeout) {
       console.error(err);
       retries -= 1;
       console.info(`retries left: ${retries}`);
-      await new Promise(res => setTimeout(res, timeout);)
+      await new Promise(res => setTimeout(res, timeout))
     }
   }
 };

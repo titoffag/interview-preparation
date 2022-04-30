@@ -16,3 +16,18 @@ console.log(pipe([times(2)])(1))
 console.log(pipe([times(2), times(3)])(2))
 console.log(pipe([times(2), times(3), plus(4)])(2))
 console.log(pipe([times(2), subtract(3), divide(4)])(2))
+
+function compose(...funcs) {
+  return function (...args) {
+    return funcs.reduceRight((prevRes, func, idx) => {
+      return func(idx == 0 ? args : prevRes);
+    });
+  }
+}
+
+const square = (x) => x * x;
+const times2 = (x) => x * 2;
+const sum = (a, b) => a + b;
+
+console.log(compose(square, times2)(2) === square(times2(2)));
+console.log(compose(square, times2, sum)(3, 4) === square(times2(sum(3, 4))));
