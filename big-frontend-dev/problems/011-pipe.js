@@ -19,9 +19,9 @@ console.log(pipe([times(2), subtract(3), divide(4)])(2))
 
 function compose(...funcs) {
   return function (...args) {
-    return funcs.reduceRight((prevRes, func, idx) => {
-      return func(idx == 0 ? args : prevRes);
-    });
+    return funcs.reduceRight((prevRes, func) => {
+      return func(prevRes);
+    }, args);
   }
 }
 

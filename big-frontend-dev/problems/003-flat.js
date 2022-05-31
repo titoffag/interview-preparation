@@ -12,6 +12,13 @@ function flat(arr, depth = 1) {
   return res;
 }
 
+const flattenAlt = (array) => array.reduce((acc, next) =>
+  Array.isArray(next) ?
+    acc.concat(flatten(next)) :
+    acc.concat([next]),
+  []
+);
+
 function flatten(arr) {
   const res = [];
   const stack = [arr];
