@@ -4,7 +4,6 @@ function all(promises) {
 
     if (promises.length == 0) {
       resolve(result);
-      return;
     }
 
     let countPending = promises.length;
