@@ -36,3 +36,16 @@ function flatten(arr) {
 
   return res;
 }
+
+function* flattenAlt2(array, depth = 1) {
+  for (const item of array) {
+    if (Array.isArray(item) && depth > 0) {
+      yield* flatten(item, depth - 1);
+    } else {
+      yield item;
+    }
+  }
+}
+
+const arr = [1, 2, [3, 4, [5, 6]]];
+const flattened = [...flattenAlt2(arr, Infinity)];
