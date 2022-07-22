@@ -30,4 +30,10 @@ function excludeItems(items, excludes) {
   });
 }
 
+function excludeItemsAlt(items, excludes) {
+  return items.filter(
+    (item) => !excludes.some(({k: key, v: value}) => item[key] === value),
+  );
+}
+
 console.log(excludeItems(items, excludes));
