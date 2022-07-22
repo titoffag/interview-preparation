@@ -5,8 +5,8 @@ function getHeightRecursive(tree) {
     return maxRecursionDepth;
   }
 
-  for (let i = 0; i < tree.children.length; i++) {
-    maxRecursionDepth = Math.max(maxRecursionDepth, getHeightRecursive(tree.children[i]));
+  for (const node of tree.children) {
+    maxRecursionDepth = Math.max(maxRecursionDepth, getHeightRecursive(node));
   }
 
   return ++maxRecursionDepth;
