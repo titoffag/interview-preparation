@@ -20,3 +20,20 @@ function all(promises) {
     });
   });
 }
+
+async function allAlt(promises) {
+  const result = [];
+  if (!promises.length) {
+    return result;
+  }
+
+  try {
+    for await (const value of promises) {
+      result.push(value);
+    }
+  } catch (err) {
+    return Promise.reject(err);
+  }
+
+  return Promise.resolve(result);
+}
