@@ -6,8 +6,8 @@ Custom bind +
 
 setTimeout ?
 
-Promise +
-Promise.all ?
+Promise ?
+Promise.all +
 Promise.race ?
 Promise.any ?
 Promise.allSettled ?
@@ -17,7 +17,7 @@ Promise.allSettled ?
 - five-star widget +
 - progress bar ?
 - dnd component ?
-- 3d WebGL product viewer ?
+- 3d product viewer ?
 
 80 easy / 34 +
 20 medium / 3 +
