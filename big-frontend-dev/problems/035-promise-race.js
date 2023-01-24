@@ -3,13 +3,9 @@
  * @return {Promise}
  */
 function race(promises) {
-  return new Promise((res, rej) => {
-    if (!promises?.length) {
-      res();
-    }
-
-    for (const p of promises) {
-      Promise.resolve(p).then(res, rej);
+  return new Promise((resolve, reject) => {
+    for (const promise of promises) {
+      promise.then(resolve, reject);
     }
   });
 }

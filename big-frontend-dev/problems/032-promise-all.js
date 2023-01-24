@@ -1,23 +1,23 @@
 function all(promises) {
   return new Promise((resolve, reject) => {
+    let countPending = promises.length;
     const result = [];
 
-    if (promises.length == 0) {
+    if (countPending == 0) {
       resolve(result);
     }
 
-    let countPending = promises.length;
-
-    promises.forEach((promise, index) => {
-      Promise.resolve(promise)
-        .then(value => {
-          result[index] = value;
+    for (let i = 0; i < promises.length; i++) {
+      Promise.resolve(promises[i])
+        .then((value) => {
+          result[i] = value;
           countPending -= 1;
-          if (countPending == 0) {
+
+          if (countPending === 0) {
             resolve(result);
           }
         }, reject);
-    });
+    }
   });
 }
 

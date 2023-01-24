@@ -1,14 +1,17 @@
-import React from "react";
+import React from 'react';
+
+const stubFn = () => {};
 
 export function useTimeout(callback: () => void, delay: number) {
-  const callbackRef = React.useRef<() => void>();
-
+  const cbRef = React.useRef<Function>(stubFn);
+  
   React.useEffect(() => {
-    callbackRef.current = callback;
+    cbRef.current = callback;
   }, [callback]);
 
-  React.useEffect(()=> {
-    const timeoutId = setTimeout(() => callbackRef.current?.call(null), delay);
-    return () => clearTimeout(timeoutId);
+  React.useEffect(() => {
+    const timer = window.setTimeout(() => cbRef.current(), delay);
+
+    return () => clearTimeout(timer);
   }, [delay]);
 }

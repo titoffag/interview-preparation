@@ -1,50 +1,108 @@
+const STATE = {
+  pending: 'pending',
+  fulfilled: 'fulfilled',
+  rejected: 'rejected',
+}
+
 class MyPromise {
+  _state;
+  _result;
+  _onFulfilled;
+  _onRejected;
+  _thenPromiseResolve;
+  _thenPromiseReject;
+
   constructor(executor) {
-    this.state = 'pending';
+    this._state = STATE.pending;
+
     try {
       executor(this._resolve.bind(this), this._reject.bind(this));
-    } catch (error) {
+    } catch(error) {
       this._reject(error);
     }
   }
 
   _resolve(value) {
-    if (this.state != 'pending') return;
+    if (this._state !== STATE.pending) return;
 
-    this.state = 'fulfilled';
-    this.result = value;
+    this._state = STATE.fulfilled;
+    this._result = value;
+
     queueMicrotask(() => {
-      this.onFulfilled(this.result);
+      if (
+        !this._onFulfilled ||
+        !this._thenPromiseResolve ||
+        !this._thenPromiseReject
+      ) {
+        return;
+      }
+
+      try {
+        const returnedValue = this._onFulfilled(this._result);
+
+        if (returnedValue instanceof MyPromise) {
+          returnedValue.then(this._thenPromiseResolve, this._thenPromiseReject);
+        } else {
+          this._thenPromiseResolve(returnedValue);
+        }
+      } catch (error) {
+        this._thenPromiseReject(error);
+      }
     });
   }
 
-  _reject(value) {
-    if (this.state != 'pending') return;
+  _reject(reason) {
+    if (this._state !== STATE.pending) return;
 
-    this.state = 'rejected';
-    this.result = value;
+    this._state = STATE.rejected;
+    this._result = reason;
+
+    queueMicrotask(() => {
+      if (
+        !this._onRejected ||
+        !this._thenPromiseResolve ||
+        !this._thenPromiseReject
+      ) {
+        return;
+      }
+
+      try {
+        const returnedValue = this._onRejected(this._result);
+
+        if (returnedValue instanceof MyPromise) {
+          returnedValue.then(this._thenPromiseResolve, this._thenPromiseReject);
+        } else {
+          this._thenPromiseResolve(returnedValue);
+        }
+      } catch (error) {
+        this._thenPromiseReject(error);
+      }
+    });
   }
-
+  
   then(onFulfilled, onRejected) {
-    const isOnFulfilledFunction = typeof onFulfilled == 'function';
-    this.onFulfilled = isOnFulfilledFunction ? onFulfilled : (value) => value;
+    this._onFulfilled = typeof onFulfilled === 'function' ? onFulfilled : value => value;
+    this._onRejected = typeof onRejected === 'function' ? onRejected : (reason) => { throw reason };
 
-    return new Promise((resolve, reject) => { });
+    return new MyPromise((resolve, reject) => {
+      this._thenPromiseResolve = resolve;
+      this._thenPromiseReject = reject;
+    });
   }
-
+  
   catch(onRejected) {
-    // your code here
+    return this.then(undefined, onRejected);
   }
-
+  
   static resolve(value) {
-    // your code here
-  }
+    if (value instanceof MyPromise) return value;
 
-  static reject(value) {
-    // your code here
+    return new MyPromise(resolve => resolve(value));
+  }
+  
+  static reject(reason) {
+    return new MyPromise((_, reject) => {
+      reject(reason);
+    });
   }
 }
-
-const p = new MyPromise((resolve) => {
-  resolve(10)
-}).then((result) => console.log(result));
