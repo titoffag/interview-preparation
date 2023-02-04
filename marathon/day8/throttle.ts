@@ -12,14 +12,19 @@ function throttle(fn: Function, delay: number) {
   }
 }
 
-function laugh(a: number) {
-  console.log('Ha-ha!', a);
+function laugh() {
+  console.log('Ha-ha!', this.a);
 }
 
 const throttledLaugh = throttle(laugh, 300);
 
-throttledLaugh(1);
-throttledLaugh();
-throttledLaugh();
-throttledLaugh();
-throttledLaugh();
+const a = {
+  a: 1,
+  throttledLaugh,
+}
+
+a.throttledLaugh();
+a.throttledLaugh();
+a.throttledLaugh();
+a.throttledLaugh();
+a.throttledLaugh();
