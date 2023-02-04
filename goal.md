@@ -21,5 +21,3 @@ Promise.allSettled ?
 
 80 easy / 34 +
 20 medium / 3 +
-
-stuff - need to folder restructure
