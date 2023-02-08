@@ -3,20 +3,16 @@ function getUniqueStrs(originalStrings: string[]) {
   const canonicalStrings = originalStrings.map(string => string.split('').sort().join(''));
 
   // O (n)
-  const uniqueStrsWithIdx = new Map<string, number>();
-  for (const [index, string] of canonicalStrings.entries()) {
-    uniqueStrsWithIdx.has(string) 
-      ? uniqueStrsWithIdx.delete(string)
-      : uniqueStrsWithIdx.set(string, index);
+  const uniqueStrs = new Map<string, {string: string, count: number}>();
+  for (const [index, canonicalString] of canonicalStrings.entries()) {
+    if (uniqueStrs.has(canonicalString)) {
+      uniqueStrs.get(canonicalString)!.count++;
+    } else {
+      uniqueStrs.set(canonicalString, {string: originalStrings[index], count: 1 });
+    }
   }
 
-  // O (k), k - count of unique strings
-  const result: string[] = [];
-  for(const idx of uniqueStrsWithIdx.values()) {
-    result.push(originalStrings[idx]);
-  }
-
-  return result;
+  return Array.from(uniqueStrs.values()).filter(({count}) => count == 1).map(({string}) => string);
 }
 
 console.log(getUniqueStrs(['atoe', 'otea', 'ben', 'enb', 'baz', 'foo'])); // ['baz', 'foo']

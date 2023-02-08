@@ -4,18 +4,21 @@ function isObject(obj: unknown): obj is {[index: string]: unknown} {
   return typeof obj === 'object' && obj != null;
 }
 
+function fastCompare(obj1: unknown, obj2: unknown) {
+  return JSON.stringify(obj1) === JSON.stringify(obj2);
+}
+
 // isEquals or deepEquals
 function compare(obj1: unknown, obj2: unknown) {
-  if (obj1 === obj2) {
-    return true;
-  }
-  
+  // object or array
   if (isObject(obj1) && isObject(obj2)) {
-    if (Object.keys(obj1).length !== Object.keys(obj2).length) {
+    if (
+      obj1.constructor !== obj2.constructor || 
+      Object.keys(obj1).length !== Object.keys(obj2).length
+    ) {
       return false;
     }
 
-    // array or object
     for (const prop in obj1) {
       if (!compare(obj1[prop], obj2[prop])) {
         return false;
@@ -25,8 +28,10 @@ function compare(obj1: unknown, obj2: unknown) {
     return true;
   }
 
-  return false;
+  // basic case
+  return obj1 === obj2;
 }
 
-console.log(compare({a: 1, b: [1, 2, 3]}, {a: 1, b: [1, 2, 3]})); // true
+const foo = () => {};
+console.log(compare({b: [1, 2, 3], a: 1, foo}, {a: 1, b: [1, 2, 3], foo})); // true
 console.log(compare({a: 1, b: [1, 2]}, {a: 1, b: [1, 2, 3]}));    // false

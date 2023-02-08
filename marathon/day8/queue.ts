@@ -17,8 +17,31 @@ class Queue<T> {
     return value;
   }
 
+  peek(): T {
+    return this.storage[this.head];
+  }
+
   get size(): number {
     return this.tail - this.head;
+  }
+
+  // *[Symbol.iterator]() {
+  //   for (const value of Object.values(this.storage)) {
+  //     yield value;
+  //   }
+  // }
+
+  [Symbol.iterator]() {
+    let cursor = this.head;
+
+    return {
+      next: () => {
+        return {
+          value: this.storage[cursor++],
+          done: cursor > this.tail,
+        }
+      }
+    }
   }
 }
 
@@ -27,6 +50,10 @@ const queue = new Queue<number>();
 queue.push(1);
 queue.push(2);
 queue.push(3);
+
+for (const el of queue) {
+  console.log(el);
+}
 
 console.log(queue.pop()); // 1
 console.log(queue.pop()); // 2
