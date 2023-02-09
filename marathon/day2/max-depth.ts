@@ -1,4 +1,9 @@
-const obj = {
+interface Tree<T> {
+  value: T,
+  children?: Tree<T>[],
+}
+
+const obj: Tree<string> = {
   value: 'foo',
   children: [
     {
@@ -12,29 +17,7 @@ const obj = {
   ]
 };
 
-function maxDepth(tree) {
-  let maxDepthCount = 0;
-  
-  if (!tree) {
-    return maxDepthCount;
-  }
-  
-  const queue = [tree];
-  while(queue.length) {
-    for (let i = 0; i < queue.length; i++) {
-      const node = queue.shift();
-      if (node.children) {
-        maxDepthCount++;
-        queue.push(...node.children);
-      }
-    }
-  }
-  
-  return maxDepthCount;
-}
-
-
-function maxDepthAlt(tree) {
+function maxDepth<T>(tree: Tree<T>) {
   let maxDepthCount = 0;
   
   if (!tree || !tree?.children?.length) {

@@ -1,18 +1,6 @@
 function format(str: string, obj: Record<string, unknown>) {
-  return str.replace(/\${(.+?)}/g, (_, key: string) => {
-    if (obj[key]) {
-      return obj[key];
-    }
-    
-    return eval(
-      key.replace(/(\w+)/g, (_, key) => {
-        if (obj[key]) {
-          return obj[key];
-        }
-
-        return key;
-      })
-    );
+  return str.replace(/\${(.+?)}/g, (_, expr: string) => {
+    return Function(...Object.keys(obj) , `return ${expr}`)(...Object.values(obj));
   });
 }
 

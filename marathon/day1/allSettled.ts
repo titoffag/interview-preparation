@@ -12,17 +12,23 @@ type SettledObject<T, E extends Error = Error> = {
 type SettledArray<T> = SettledObject<T>[];
 
 function allSettled<T>(iterable: T[]): Promise<SettledArray<T>> {
-  const result: SettledArray<T> = [];
   let countPendingPromises = iterable.length;
+  const result: SettledArray<T> = new Array(countPendingPromises);
 
   return new Promise((resolve) => {
+    if (countPendingPromises == 0) {
+      resolve(result);
+    }
+
     for (const [index, value] of iterable.entries()) {
       Promise.resolve(value)
         .then(value => result[index] = {status: PromiseState.Fulfilled, value})
         .catch(reason => result[index] = {status: PromiseState.Rejected, reason})
         .finally(() => {
           countPendingPromises--;
-          countPendingPromises == 0 && resolve(result);
+          if (countPendingPromises == 0) {
+            resolve(result);
+          }
         });
     }
   });
