@@ -7,6 +7,10 @@ type IntRange<F extends number, T extends number> = Exclude<Enumerate<T>, Enumer
 // 2..36
 type Radix = IntRange<2, 37>;
 
+// type Radix = 2 | 3 | 4 | 5;
+// const range = [2,3,4,5] as const;
+// type Radix = typeof range[number];
+
 const alphabet = new Map<string, number>();
 
 for(let i = '0'.codePointAt(0)!, j = 0; i <= '9'.codePointAt(0)!; i++, j++) {

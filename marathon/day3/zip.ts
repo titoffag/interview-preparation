@@ -1,4 +1,4 @@
-function* zip(...iterables) {
+function* zip(...iterables: Iterable<unknown>[]) {
   const iterators = iterables.map(iterable => iterable[Symbol.iterator]());
   
   while (true) {

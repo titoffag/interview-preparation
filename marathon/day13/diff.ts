@@ -1,3 +1,5 @@
+// TODO: TODO
+
 function diff(str1: string, str2: string): number {
   let count = 0,
     iterator1 = str1[Symbol.iterator](),
