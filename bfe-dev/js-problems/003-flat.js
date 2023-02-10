@@ -1,4 +1,4 @@
-function flat(arr, depth = 1) {
+function flatten(arr, depth = 1) {
   const res = [];
 
   for (const el of arr) {
@@ -19,7 +19,7 @@ const flattenAlt = (array) => array.reduce((acc, next) =>
   []
 );
 
-function flatten(arr) {
+function flattenAlt(arr) {
   const res = [];
   const stack = [arr];
 
