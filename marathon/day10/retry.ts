@@ -26,7 +26,7 @@ function retry<T>(callback: () => Promise<T>, opts: Options = {retry: 5, delay: 
       try {
         Promise.resolve(callback())
           .then(resolve)
-          .catch((reason) => doRetry(reason));
+          .catch(doRetry);
       } catch (reason) {
         doRetry(reason);
       }
