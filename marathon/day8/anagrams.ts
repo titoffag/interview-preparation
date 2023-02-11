@@ -1,6 +1,6 @@
 function getUniqueStrs(originalStrings: string[]) {
   // O (n * m log m) m < n, m ~ 3-4 chars, n - more bigger than m
-  const canonicalStrings = originalStrings.map(string => string.split('').sort().join(''));
+  const canonicalStrings = originalStrings.map(string => [...string].sort().join(''));
 
   // O (n)
   const uniqueStrs = new Map<string, {string: string, count: number}>();
