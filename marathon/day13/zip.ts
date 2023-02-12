@@ -1,21 +1,25 @@
-// TODO: TODO
-
-async function* zip<T>(...iterables: Array<Iterable<T>>) {
-  const iterators = iterables.map(iterable => iterable[Symbol.iterator]());
+async function* zip(...iterables: AsyncGenerator[]) {
+  const iterators = iterables.map(iterable => iterable[Symbol.asyncIterator]());
   
   while (true) {
-    const result = iterators.map(iterator => iterator.next());
-    if (result.some(el => el.done)) {
-      return;
-    } else {
-      yield result.map(el => el.value);
+    const result: unknown[] = [];
+    for (const [idx, iterator] of iterators.entries()) {
+      const {done, value} = await iterator.next();
+
+      if (done) {
+        return;
+      }
+
+      result[idx] = value;
     }
+
+    yield result;
   }
 }
 
-async function* makeAsync<T>(iter: Iterable<T>) {
+async function* makeAsync(iter: any): AsyncGenerator {
   yield* iter;
-}
+}g
 
 // [1, 'a', '.'] [2, 'b', '.']
 (async () => {
