@@ -49,12 +49,12 @@ function intersectRanges(oneRange: string, twoRange: string) {
   return mergedIntervals.map((pair: Pair) => pair.join('-')).join('; ');
 
   function getIntersection(
-    [startOne, endOne]: Pair, 
-    [startTwo, endTwo]: Pair,
+    [start1, end1]: Pair, 
+    [start2, end2]: Pair,
   ): Pair | null {
     const
-      low = Math.max(startOne, startTwo),
-      high = Math.min(endOne, endTwo);
+      low = Math.max(start1, start2),
+      high = Math.min(end1, end2);
 
     if (low <= high) {
       return [low, high];
