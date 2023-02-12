@@ -1,4 +1,4 @@
-function reduce(unsortedArray: number[]): string[] {
+function reduce(unsortedArray: number[]): string {
   const sortedArray = unsortedArray.sort((prevValue, value) => prevValue - value);
   let start = sortedArray[0],
     end = sortedArray[0];
@@ -24,7 +24,7 @@ function reduce(unsortedArray: number[]): string[] {
     }
 
     return result;
-  }, []);
+  }, []).join(', ');
 }
 
 console.log(reduce([-2, -1, 1, 3, 6, 8, 7, 11, 45, 46, 2])); // 1-3, 6-8, 11, 45-46
