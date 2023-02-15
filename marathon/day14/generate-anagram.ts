@@ -24,7 +24,7 @@ function getAnagram(str: string) {
   }
 
   function rotate(from = 0) {
-    if (from >= chars.length) {
+    if (from == chars.length - 1) {
       return;
     }
 

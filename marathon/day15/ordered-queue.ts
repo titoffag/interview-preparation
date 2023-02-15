@@ -2,7 +2,7 @@ type Comparator<T> = (a: T, b: T) => number;
 
 class OrderedQueue<T> {
   private comparator: Comparator<T>;
-  private heap: (T | null)[] = [];
+  private heap: (T | undefined)[] = [];
   private size = 0;
 
   constructor(comparator: Comparator<T>) {
@@ -10,55 +10,90 @@ class OrderedQueue<T> {
   }
 
   push(value: T) {
-    this.heap[this.size++] = value;
-    this.swim(this.size - 1);
+    this.heap[++this.size] = value;
+    this.bubbleUp();
+	}
+
+  private bubbleUp() {
+		let
+			cursor = this.size;
+    const
+			value = this.heap[cursor];
+
+		while (cursor > 0) {
+			const
+				parentIndex = this.parent(cursor),
+				parent = this.heap[parentIndex];
+
+			if (value != null && parent != null && this.comparator(value, parent) <= 0) {
+				break;
+			}
+
+			this.heap[cursor] = parent;
+			cursor = parentIndex;
+		}
+
+		this.heap[cursor] = value;
+	}
+
+  pop(): T | undefined {
+    const head = this.heap[0];
+
+    this.heap[0] = this.heap[this.size];
+    this.heap[this.size] = undefined;
+    this.size--;
+    this.sinkDown();
+    return head;
   }
 
-  pop(): T | null {
-    this.swap(0, --this.size);
+  sinkDown() {
+		const
+			value = this.heap[0];
 
-    const value = this.heap[this.size];
-    this.heap[this.size] = null;
-    this.sink(0, this.size - 1);
-    return value;
-  }
+		let
+			cursor = 0,
+			leftIndex = 1,
+			rightIndex = 2;
 
-  swim(index: number) {
-    while (index > 0) {
-      const parent = this.parent(index);
-      if (this.comparator(this.heap[index]!, this.heap[parent]!) > 0) {
-        this.swap(index, parent);
-        index = parent;
-      } else break;
-    }
-  }
+		while (leftIndex <= this.size) {
+			let
+				childIndex: number;
 
-  sink(index: number, N: number) {
-    while (this.left(index) <= N) {
-      const left = this.left(index);
-      const right = this.right(index);
-      const ch =
-        right <= N &&
-        this.heap[right] &&
-        this.comparator(this.heap[right]!, this.heap[left]!) >= 0
-          ? right
-          : left;
+			const
+				left = this.heap[leftIndex],
+				right = this.heap[rightIndex];
 
-      if (this.comparator(this.heap[index]!, this.heap[ch]!) < 0)
-        this.swap(index, ch);
-      else break;
-      index = ch;
-    }
-  }
+			if (right == null) {
+				childIndex = leftIndex;
+			} else {
+				childIndex = left != null && right != null && this.comparator(left, right) > 0 ? leftIndex : rightIndex;
+			}
+
+			const
+				child = this.heap[childIndex];
+
+			if (value != null && child != null && this.comparator(value, child) >= 0) {
+				break;
+			}
+
+			this.heap[cursor] = child;
+			cursor = childIndex;
+
+			leftIndex = this.left(cursor);
+			rightIndex = this.right(cursor);
+		}
+
+		this.heap[cursor] = value;
+	}
 
   parent = (i: number) => Math.floor((i - 1) / 2);
   left = (parent: number) => 2 * parent + 1;
   right = (parent: number) => 2 * parent + 2;
-  swap = (i: number, j: number) =>
-    ([this.heap[i], this.heap[j]] = [this.heap[j], this.heap[i]]);
 }
 
-const queue = new OrderedQueue<number>((a, b) => a - b);
+const min = (a: number, b: number) => b - a;
+const max = (a: number, b: number) => a - b;
+const queue = new OrderedQueue<number>(max);
 
 queue.push(1);
 queue.push(5);
