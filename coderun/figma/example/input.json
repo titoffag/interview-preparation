@@ -1,0 +1,67 @@
+{
+    "document": {
+        "id": "0:0",
+        "name": "Document",
+        "type": "DOCUMENT",
+        "children": [
+            {
+                "id": "0:1",
+                "name": "Page 1",
+                "type": "CANVAS",
+                "children": [
+                    {
+                        "id": "5:2",
+                        "name": "Store",
+                        "type": "TEXT",
+                        "blendMode": "PASS_THROUGH",
+                        "absoluteBoundingBox": { "x": -32, "y": -72, "width": 64, "height": 29 },
+                        "constraints": { "vertical": "TOP", "horizontal": "LEFT" },
+                        "fills": [
+                            { "blendMode": "NORMAL", "type": "SOLID", "color": { "r": 0, "g": 0, "b": 0, "a": 1 } }
+                        ],
+                        "strokes": [],
+                        "strokeWeight": 1,
+                        "strokeAlign": "OUTSIDE",
+                        "effects": [],
+                        "characters": "Store",
+                        "style": {
+                            "fontFamily": "Inter",
+                            "fontPostScriptName": "Inter-Bold",
+                            "fontWeight": 700,
+                            "textAutoResize": "WIDTH_AND_HEIGHT",
+                            "fontSize": 24,
+                            "textAlignHorizontal": "LEFT",
+                            "textAlignVertical": "TOP",
+                            "letterSpacing": 0,
+                            "lineHeightPx": 28.125,
+                            "lineHeightPercent": 100,
+                            "lineHeightUnit": "INTRINSIC_%"
+                        },
+                        "characterStyleOverrides": [],
+                        "styleOverrideTable": {}
+                    }
+                ],
+                "backgroundColor": {
+                    "r": 0.8980392217636108,
+                    "g": 0.8980392217636108,
+                    "b": 0.8980392217636108,
+                    "a": 1
+                },
+                "prototypeStartNodeID": null,
+                "flowStartingPoints": [],
+                "prototypeDevice": { "type": "NONE", "rotation": "NONE" }
+            }
+        ]
+    },
+    "components": {},
+    "componentSets": {},
+    "schemaVersion": 0,
+    "styles": {},
+    "name": "Untitled",
+    "lastModified": "2022-02-24T20:00:24Z",
+    "thumbnailUrl": "https://s3-alpha-sig.figma.com/thumbnails/726b7141-d3a3-4a8c-b521-8926c6454c75?Expires=1646611200&Signature=TZPspFdmv7h7hn2vE4Cguoy-1NPLjTrIVvsNmN1Hn-pVPWn~tP2YmrFqlwt4D9A~mTCu050iviF3Edwinf0FvXbmJJ9FCICCUG~jg5AGXdbNBJYX1luKY4btDk9aeVIkvA0NcvW9igRW6LmrJ7kC2xjcQcQ9xx3DP-Qh473go5c24Qn3ONaSqbqbljTdWnh1JoQzcucyhCIxEqKFW~TpaH9V~IUkDgkyXuayVxWfkCeFRnabUclw4z3cH4zX6hYHKWporMb8JktMIprNRos1Xg1J~ui51dRU3tVjuXC0lpBgodZj-D3bctfdcSLfo6HbnS7-ZrRv-0g~nTRubXqcpw__&Key-Pair-Id=APKAINTVSUGEWH5XD5UA",
+    "version": "1591971583",
+    "role": "viewer",
+    "editorType": "figma",
+    "linkAccess": "view"
+}
