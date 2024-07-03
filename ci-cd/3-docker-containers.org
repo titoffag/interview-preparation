@@ -1,0 +1,492 @@
+#+title: CI/CD Workshop #3 Docker Containers
+#+author: Vitaly Slobodin
+#+roam_tags: gitlab ci-cd-workshop
+#+PROPERTY: header-args :results silent :noweb yes :exports code
+
+* Contents :TOC:
+- [[#настройка-docker-registry][Настройка Docker Registry]]
+- [[#подготовка-репозитория-с-backend][Подготовка репозитория с backend]]
+- [[#добавляем-сборку-образа-в-ci-pipeline][Добавляем сборку образа в CI pipeline]]
+    - [[#frontend][Frontend]]
+    - [[#backend][Backend]]
+- [[#публикация-образа-в-docker-registry][Публикация образа в Docker Registry]]
+    - [[#frontend-1][Frontend]]
+    - [[#backend-1][Backend]]
+- [[#настройка-сервера-под-работу-с-docker][Настройка сервера под работу с Docker]]
+    - [[#установка-gitlab-runner][Установка GitLab Runner]]
+    - [[#установка-и-настройка-балансера-traefik][Установка и настройка балансера Traefik]]
+- [[#docker-compose][Docker-compose]]
+- [[#первое-развертывание-с-docker][Первое развертывание с Docker]]
+    - [[#backend-2][Backend]]
+    - [[#frontend-2][Frontend]]
+- [[#review-apps][Review Apps]]
+- [[#ссылки][Ссылки]]
+
+* Настройка Docker Registry
+  А настраивать ничего не надо :) Все уже настроено и готово к использованию.
+* Подготовка репозитория с backend
+  Прежде чем мы перейдем к добавлению Docker в GitLab CI, нам нужно убрать сокет из нашего backend репозитория, чтобы не усложнять примеры пробросом сокета. Для этого приведет =lib/server.js= к тому, что у нас было ранее:
+  #+begin_src javascript
+  #!/usr/bin/env node
+
+const path = require('path');
+const dotenv = require('dotenv');
+dotenv.config({path: path.join(__dirname, '../.env')});
+
+const http = require('http');
+const pino = require('pino')();
+const app = require('./app');
+const config = require('../config');
+
+const port = config.get('port');
+app.set('port', port);
+
+let server;
+
+server = http.createServer(app);
+server.listen(port);
+server.on('error', onError);
+server.on('listening', onListening);
+
+function onError(error) {
+if (error.syscall !== 'listen') {
+throw error;
+}
+
+let bind = '';
+
+if (typeof port === 'string') {
+bind = `Pipe ${port}`;
+}
+
+if (typeof port === 'number') {
+bind = `Port ${port}`;
+}
+
+// Handle specific listen errors with friendly messages.
+switch (error.code) {
+case 'EACCES':
+// eslint-disable-next-line no-console
+console.error(`${bind} requires elevated privileges`);
+process.exit(1);
+break;
+case 'EADDRINUSE':
+// eslint-disable-next-line no-console
+console.error(`${bind} is already in use`);
+process.exit(1);
+break;
+default:
+throw error;
+}
+}
+
+// Event listener for HTTP server "listening" event.
+function onListening() {
+const addr = server.address();
+const bind = typeof addr === 'string' ? 'pipe ' + addr : 'port ' + addr.port;
+pino.info(`Listening on ${bind}`);
+}
+#+end_src
+* Добавляем сборку образа в CI pipeline
+  Для начала давайте создадим в каждом приложении по файлу =.dockerignore= для списка исключений по аналогии с =.gitignore=.
+  #+begin_src dockerignore
+  node_modules
+  #+end_src
+  ** Frontend
+  Начнем с упаковки frontend приложения в Docker контейнер. Мы будем использовать multi-stage сборку.
+  Ее суть в том, что сборку мы проводим с одним образом, а потом копируем артефакты сборки во второй
+  образ, который и будет использоваться нами при развертывании.
+  #+begin_src dockerfile
+  FROM node:14.17.1-alpine as builder
+  WORKDIR /app
+  ENV PATH /app/node_modules/.bin:$PATH
+  COPY package.json ./
+  COPY package-lock.json ./
+  RUN npm ci --silent
+  COPY . ./
+  ARG BACKEND_URL $BACKEND_URL
+  RUN REACT_APP_BACKEND_URL=$BACKEND_URL npm run build
+
+# production environment
+FROM nginx:stable-alpine
+COPY --from=builder /app/build /usr/share/nginx/html
+EXPOSE 80
+CMD ["nginx", "-g", "daemon off;"]
+#+end_src
+** Backend
+#+begin_src dockerfile
+FROM node:14.17.0-alpine
+
+RUN npm install -g npm@latest
+
+RUN mkdir -p /usr/src/app
+WORKDIR /usr/src/app
+
+COPY package.json package-lock.json ./
+RUN npm install
+
+COPY . .
+
+EXPOSE 3000
+
+CMD [ "./bin/start.sh" ]
+#+end_src
+* Публикация образа в Docker Registry
+  Теперь переключимся на CI и добавим сборку Docker образов в каждый проект. Начнем с frontend.
+  ** Frontend
+  #+begin_src yaml
+  .docker:
+  image: docker:20
+  services:
+    - docker:dind
+      before_script:
+    - docker login -u $CI_REGISTRY_USER -p $CI_REGISTRY_PASSWORD $CI_REGISTRY
+
+build:
+stage: build
+extends:
+- .docker
+script:
+- docker pull $CI_REGISTRY_IMAGE:latest || true
+- >
+docker build
+--pull
+--cache-from $CI_REGISTRY_IMAGE:latest
+--build-arg BACKEND_URL="http://$CI_COMMIT_REF_SLUG.$APP_HOST/api"
+--tag $CI_REGISTRY_IMAGE:$CI_COMMIT_SHA
+--tag $CI_REGISTRY_IMAGE:$CI_COMMIT_REF_SLUG
+.
+- docker push $CI_REGISTRY_IMAGE:$CI_COMMIT_SHA
+- docker push $CI_REGISTRY_IMAGE:$CI_COMMIT_REF_SLUG
+rules:
+- if: $CI_COMMIT_BRANCH == 'main'
+- if: $CI_PIPELINE_SOURCE == "merge_request_event"
+
+push_latest:
+extends:
+- .docker
+stage: push
+variables:
+GIT_STRATEGY: none
+script:
+- docker pull $CI_REGISTRY_IMAGE:$CI_COMMIT_SHA
+- docker tag $CI_REGISTRY_IMAGE:$CI_COMMIT_SHA $CI_REGISTRY_IMAGE:latest
+- docker push $CI_REGISTRY_IMAGE:latest
+#+end_src
+** Backend
+У нас в репозитории проекта уже есть Dockerfile, он нам подойдет, только давайте использоваться в нем Alpine для скорости
+и уменьшении размера.
+#+begin_src dockerfile
+FROM node:14.17.0-alpine
+
+RUN npm install -g npm@latest
+
+RUN mkdir -p /usr/src/app
+WORKDIR /usr/src/app
+
+COPY package.json package-lock.json ./
+RUN npm install
+
+COPY . .
+
+EXPOSE 3000
+
+CMD [ "./bin/start.sh" ]
+#+end_src
+
+И добавляем сборку в CI.
+#+begin_src yaml
+.docker:
+image: docker:20
+services:
+- docker:dind
+before_script:
+- docker login -u $CI_REGISTRY_USER -p $CI_REGISTRY_PASSWORD $CI_REGISTRY
+
+build:
+extends:
+- .docker
+stage: build
+script:
+- docker pull $CI_REGISTRY_IMAGE:latest || true
+- >
+docker build
+--pull
+--cache-from $CI_REGISTRY_IMAGE:latest
+--tag $CI_REGISTRY_IMAGE:$CI_COMMIT_SHA
+--tag $CI_REGISTRY_IMAGE:$CI_COMMIT_REF_SLUG
+.
+- docker push $CI_REGISTRY_IMAGE:$CI_COMMIT_SHA
+- docker push $CI_REGISTRY_IMAGE:$CI_COMMIT_REF_SLUG
+
+push_latest:
+extends:
+- .docker
+stage: push
+variables:
+GIT_STRATEGY: none
+script:
+- docker pull $CI_REGISTRY_IMAGE:$CI_COMMIT_SHA
+- docker tag $CI_REGISTRY_IMAGE:$CI_COMMIT_SHA $CI_REGISTRY_IMAGE:latest
+- docker push $CI_REGISTRY_IMAGE:latest
+#+end_src
+* Настройка сервера под работу с Docker
+  Наш сервер, прежде всего, нуждается в чистке. Давайте удалим все то, что мы создавали ранее. Альтернативным вариантом будет просто
+  сброс сервера на чистый образ, но доступы и пользователя =deploy= придется тогда создавать заново.
+  ** Установка GitLab Runner
+  Есть два способа для разворачивания Review App при помощи Docker:
++ Классический через =ssh=
++ Через GitLab Runner с типом =shell=. Такой Runner будет работать прямо на сервере и выполнять команды прямо на нем, что в нашем случае довольно удобно. Давайте использовать этот способ.
+  Установим Runner.
+  #+begin_src sh
+  curl -L "https://packages.gitlab.com/install/repositories/runner/gitlab-runner/script.deb.sh" | sudo bash
+  #+end_src
+  Добавим его в =docker= группу для возможности оперирования ими.
+  #+begin_src sh
+  usermod -aG docker gitlab-runner
+  #+end_src
+  Регистрируем. При регистрации вводим информацию из вашей группы на GitLab (URL и токен). Описание может быть любым, а вот тег нужно ввести и запомнить, потому что этот тег мы будем использовать для job, которые мы будем запускать на сервере.
+  #+begin_src sh
+  gitlab-runner register
+  #+end_src
+  ** Установка и настройка балансера Traefik
+  Для удобной балансировки и автоматических маршрутов мы будет использовать traefik. Его задача будет работать вместо nginx и проксировать запросы в зависимости от запрошенного поддомена к нужным нодам в Docker Swarm.
+  #+begin_src ascii
+  ┌─────────────────┐
+  │                 │
+  main.IP_ADDRESS.nip.io       │                 │                    ┌────────────────────┐
+  ──────────────────────────────┤                 ├────────────────────►       main nodes   │
+  │                 │                    └────────────────────┘
+  testing.IP_ADDRESS.nip.io    │   traefik       │
+  ──────────────────────────────┤                 │                     ┌───────────────────┐
+  │                 ├────────────────────►│                   │
+  feature.IP_ADDRESS.nip.io    │                 │                     │     testing nodes │
+  ──────────────────────────────┤                 │                     └───────────────────┘
+  └─────────────────┤
+  │                     ┌───────────────────┐
+  └─────────────────────┤                   │
+  │     feature nodes │
+  │                   │
+  └───────────────────┘
+  #+end_src
+  Теперь давайте запустим его тоже в Docker Swarm. Запускать будет от =gitlab-runner= в директории =proxy=. Создадим там =docker-compose.yml= со следующим содержимым.
+  #+begin_src yaml
+  version: "3.7"
+  services:
+  traefik:
+  image: traefik:v1.7
+  command:
+  - "--entrypoints=Name:http Address::80"
+  - "--defaultentrypoints=http"
+  - "--logLevel=INFO"
+  - "--docker"
+  - "--docker.swarmMode=true"
+  - "--docker.domain=172-104-151-230.nip.io"
+  - "--docker.watch"
+  volumes:
+  - /var/run/docker.sock:/var/run/docker.sock
+  networks:
+  - proxy
+  - traefik
+  ports:
+  - target: 80
+  published: 80
+  mode: host
+  - target: 443
+  published: 443
+  mode: host
+  deploy:
+  mode: global
+  placement:
+  constraints:
+  - node.role == manager
+  update_config:
+  parallelism: 1
+  delay: 10s
+  restart_policy:
+  condition: on-failure
+
+networks:
+proxy:
+driver: overlay
+external: true
+traefik:
+driver: overlay
+#+end_src
+И давайте запустим его:
+#+begin_src sh
+docker stack deploy traefik -c docker-compose.yml
+#+end_src
+* Docker-compose
+  Наше приложение состоит из 3 компонент: backend, frontend и база данных. Для удобства мы можем написать специальный шаблонный =docker-compose.yml= файл, в котором определить все необходимые сервисы.
+  Создадим этот файл домашней директории =gitlab-runner=.
+  #+begin_src yaml
+  version: "3.7"
+
+services:
+postgres:
+image: postgres:12.7-alpine
+hostname: postgres
+networks:
+- proxy
+environment:
+POSTGRES_USER: production
+POSTGRES_PASSWORD: production
+deploy:
+labels:
+- "traefik.enable=false"
+mode: replicated
+replicas: 1
+update_config:
+parallelism: 2
+delay: 10s
+restart_policy:
+condition: on-failure
+web:
+image: "${CI_REGISTRY}/ci-cd-workshop1/react-redux-realworld-example-app:${CI_COMMIT_REF_SLUG:-main}"
+networks:
+- proxy
+depends_on:
+- node
+deploy:
+labels:
+- "traefik.backend=${CI_COMMIT_REF_SLUG}"
+- "traefik.frontend.rule=Host:${CI_COMMIT_REF_SLUG}.${APP_HOST}"
+- "traefik.docker.network=proxy"
+- "traefik.enable=true"
+- "traefik.port=80"
+- "traefik.backend.loadbalancer.method=drr"
+- "traefik.default.protocol=http"
+mode: replicated
+replicas: 1
+update_config:
+parallelism: 2
+delay: 10s
+restart_policy:
+condition: on-failure
+node:
+image: "${CI_REGISTRY}/ci-cd-workshop1/express-bookshelf-realworld-example-app:${CI_COMMIT_REF_SLUG:-main}"
+networks:
+- proxy
+depends_on:
+- postgres
+environment:
+NODE_ENV: production
+DB_NAME: production
+DB_HOST: postgres
+DB_USER: production
+DB_PASSWORD: production
+SECRET: secret
+deploy:
+labels:
+- "traefik.backend=${CI_COMMIT_REF_SLUG:-main}"
+- "traefik.frontend.rule=Host:${CI_COMMIT_REF_SLUG}.${APP_HOST};PathPrefix:/api"
+- "traefik.docker.network=proxy"
+- "traefik.enable=true"
+- "traefik.port=3000"
+- "traefik.backend.loadbalancer.method=drr"
+- "traefik.default.protocol=http"
+mode: replicated
+replicas: 1
+update_config:
+parallelism: 2
+delay: 10s
+restart_policy:
+condition: on-failure
+
+networks:
+proxy:
+external: true
+name: proxy
+#+end_src
+* Первое развертывание с Docker
+  Прежде чем мы перейдем к review app, надо сделать развертывание главной ветки. Добавим две новые job в CI.
+  ** Backend
+  =push-latest= будет формировать последнюю версию образа и загружать ее в реестр.
+  #+begin_src yaml
+  push_latest:
+  stage: push
+  extends:
+    - .docker
+      variables:
+      GIT_STRATEGY: none
+      script:
+    - docker pull $CI_REGISTRY_IMAGE:$CI_COMMIT_SHA
+    - docker tag $CI_REGISTRY_IMAGE:$CI_COMMIT_SHA $CI_REGISTRY_IMAGE:latest
+    - docker push $CI_REGISTRY_IMAGE:latest
+      only:
+    - main
+      #+end_src
+
+И =deploy=, при помощи которой мы будем разворачивать образ в контейнере на сервере.
+#+begin_src yaml
+deploy:
+tags:
+- remote
+stage: deploy
+variables:
+GIT_STRATEGY: none
+script:
+- docker login -u $CI_REGISTRY_USER -p $CI_REGISTRY_PASSWORD $CI_REGISTRY
+- docker pull $CI_REGISTRY_IMAGE:$CI_COMMIT_REF_SLUG
+- mkdir -p ~/deploy/$CI_COMMIT_REF_SLUG
+- cp ~/docker-compose.yml ~/deploy/$CI_COMMIT_REF_SLUG/
+- docker stack deploy $CI_COMMIT_REF_SLUG -c /home/gitlab-runner/deploy/$CI_COMMIT_REF_SLUG/docker-compose.yml --with-registry-auth
+environment:
+name: production
+url: http://$CI_COMMIT_REF_SLUG.$APP_HOST/
+rules:
+- if: $CI_COMMIT_BRANCH == 'main'
+#+end_src
+** Frontend
+И тут опять повезло, потому что для frontend все действия будут аналогичны.
+* Review Apps
+  По аналогии с предыдущим шагом обе jobs для запуска и остановки Review App будут одинаковы.
+  #+begin_src yaml
+  create_review_app:
+  tags:
+    - remote
+      stage: review
+      extends:
+    - .docker
+      variables:
+      GIT_STRATEGY: none
+      script:
+    - docker pull $CI_REGISTRY_IMAGE:$CI_COMMIT_REF_SLUG
+    - mkdir -p ~/deploy/$CI_COMMIT_REF_SLUG
+    - cp ~/docker-compose.yml ~/deploy/$CI_COMMIT_REF_SLUG/
+    - docker stack deploy $CI_COMMIT_REF_SLUG -c /home/gitlab-runner/deploy/$CI_COMMIT_REF_SLUG/docker-compose.yml --with-registry-auth
+      environment:
+      name: review/$CI_COMMIT_REF_NAME
+      url: http://$CI_COMMIT_REF_SLUG.$APP_HOST/
+      on_stop: stop_review
+      rules:
+    - if: '$CI_MERGE_REQUEST_TITLE =~ /SKIP REVIEW/'
+      when: never
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+
+stop_review:
+tags:
+- remote
+stage: review
+variables:
+GIT_STRATEGY: none
+environment:
+name: review/$CI_COMMIT_REF_NAME
+action: stop
+script:
+- docker stack rm $CI_COMMIT_REF_SLUG
+- docker rmi $CI_REGISTRY:$CI_COMMIT_REF_SLUG
+- rm -rf ~/deploy/$CI_COMMIT_REF_SLUG
+rules:
+- if: '$CI_MERGE_REQUEST_TITLE =~ /SKIP REVIEW/'
+when: never
+- if: $CI_PIPELINE_SOURCE == "merge_request_event"
+when: manual
+#+end_src
+* Ссылки
++ [[https://docs.gitlab.com/ee/user/packages/container_registry/index.html][GitLab Container Registry]]
++ [[https://docs.docker.com/engine/reference/builder/#dockerignore-file][.dockerignore]]
++ [[https://docs.docker.com/develop/develop-images/multistage-build/][Docker Multi-stage build]]
++ [[https://docs.docker.com/engine/security/rootless/][Docker rootless mode]]
++ [[https://doc.traefik.io/traefik/v1.7/][Traefik 1.7]]

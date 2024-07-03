@@ -1,0 +1,1253 @@
+#+title: CI/CD Workshop #1
+#+roam_tags: gitlab ci-cd-workshop
+#+PROPERTY: header-args :results silent :noweb yes :exports code
+#+LAST_MODIFIED: <2021-06-28 Mon>
+
+* Contents :TOC:
+- [[#introduction][Introduction]]
+- [[#eslint][ESLint]]
+- [[#prettier][Prettier]]
+- [[#добавление-docker-образа-для-ускорения-pipeline][Добавление Docker образа для ускорения pipeline]]
+- [[#кеширование-node_modules][Кеширование node_modules]]
+    - [[#github][GitHub]]
+    - [[#gitlab][GitLab]]
+- [[#настройка-сервера-для-развертывания-приложений][Настройка сервера для развертывания приложений]]
+    - [[#создадим-ssh-ключ-для-ci-и-деплоя][Создадим SSH ключ для CI и деплоя]]
+    - [[#скопируем-ssh-ключ-на-сервер-для-пользователя-deploy][Скопируем SSH ключ на сервер для пользователя deploy]]
+    - [[#удалим-ненужные-пакеты-и-поставим-нужные-нам][Удалим ненужные пакеты и поставим нужные нам]]
+    - [[#немного-подкрутим-брандмауэр][Немного подкрутим брандмауэр]]
+    - [[#установим-и-настроим-базу-данных][Установим и настроим базу данных]]
+    - [[#настроим-nginx][Настроим nginx]]
+    - [[#настроим-pm2-под-наше-приложение][Настроим pm2 под наше приложение]]
+- [[#настройка-сборки-и-деплоя][Настройка сборки и деплоя]]
+    - [[#backend][Backend]]
+    - [[#frontend][Frontend]]
+- [[#разбиваем-сборку-и-деплой][Разбиваем сборку и деплой]]
+    - [[#frontend-1][Frontend]]
+- [[#различия-между-gitlab-ci-и-github-actions][Различия между GitLab CI и GitHub Actions]]
+    - [[#начнем-с-установки-nodejs][Начнем с установки Node.js]]
+- [[#полезные-ссылки][Полезные ссылки]]
+
+* Introduction
+  Мы будем использовать следующие два примера в качеств наших приложений:
+- Backend  [[https://github.com/vitallium/express-bookshelf-realworld-example-app][GitHub]]  | [[https://gitlab.com/ci-cd-workshop1/express-bookshelf-realworld-example-app][GitLab]]
+- Frontend [[https://github.com/vitallium/react-redux-realworld-example-app][GitHub]]  | [[https://gitlab.com/ci-cd-workshop1/react-redux-realworld-example-app][GitLab]]
+  Для удобства каждый шаг и изменения фиксируются в отдельной ветке и коммите. Соглашение об именовании простое: =номерШага-короткоеОписание-провайдер=
+  Например, запись вида =4-eslint-github= означает, что надо смотреть репозиторий на github и ветку c соответствующим именем.
+* ESLint
+  Давайте начнем с простого и добавим проверку кода при помощи ESLint.
+  Для этого нам нужно:
+- Клонировать репозиторий
+- Установить NVM для установки нужной версии Node.js
+- Установить Node.js
+- Установить зависимости
+  Начнем с GitHub.
+  *** GitHub
+  Создаем файл для workflow с именем =eslint.yml= со следующим содержимым, которое
+  делает только вышеозначенные вещи. Создадим ветку с именем =eslint= и файл =eslint.yml= в директории =.github/workflows=:
+  #+begin_src yaml
+# имя нашего workflow. Используется исключительно для отображения в интерфейсе GitHub
+name: test
+
+# правила срабатывания - события GitHub, на которые
+# должен срабатывать текущий workflow.
+on:
+# push
+push:
+# в ветку с именем main. Квадратные скобки нужны для указания
+# нескольких веток, например, [main, developer]
+branches: [main]
+# при создании pull request
+pull_request:
+# в ветку main
+branches: [main]
+
+# workflow состоит из одной или нескольких job
+# job работают параллельно по умолчанию
+jobs:
+# название job, на которое можно ссылаться из других мест,
+# например, когда нам нужно указать, что две jobs
+# работают последовательно:
+# jobs:
+#   build:
+#   eslint:
+#     needs: build
+eslint:
+# имя для отображения в интерфейсе GitHub
+name: ESLint
+# обязательный параметр, который указывает где будет запущена job: облачный runner, self-hosted и т.д.
+runs-on: ubuntu-latest
+# последовательные задачи (шаги), важно помнить, что переменные окружения не сохраняются
+# между шагами и их нужно пробрасывать, если требуется.
+steps:
+# указываем action, который будет запущен как часть job
+# В текущем случае это клонирование репозитория
+- uses: actions/checkout@v2
+# Установка NVM
+# имя для отображения в интерфейсе GitHub
+- name: Install NVM
+# команда для установки NVM из официального README.md NVM
+run: curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.38.0/install.sh | bash
+# Активируем NVM
+- name: Activate NVM
+run: export NVM_DIR="$HOME/.nvm" && . "$NVM_DIR/nvm.sh" --no-use
+# Устанавливаем нужную версию Node.js 14.17.0
+- name: Install node.js
+# Мы ставим нужную версию в переменную окружения,
+# которую NVM будет использовать
+env:
+NODE_VERSION: 14.17.0
+# запускаем NVM для установки Node.js
+run: nvm install
+# Установка зависимостей проекта
+- name: Install dependencies
+run: npm install
+# Запуск ESLint
+- name: Lint source code with ESLint
+run: npm run eslint
+#+end_src
+Но этот workflow не будет запущен, потому что описанные правила не попадают под наше событие: push ветки =eslint=.
+Поэтому давайте уберем ограничения и оставим срабатывание workflow на простой push любой ветки.
+#+begin_src yaml
+# имя нашего workflow. Используется исключительно для отображения в интерфейсе GitHub
+name: test
+
+# правила срабатывания - события GitHub, на которые
+# должен срабатывать текущий workflow.
+on: [push]
+
+# workflow состоит из одной или нескольких job
+# job работают параллельно по умолчанию
+jobs:
+# название job, на которое можно ссылаться из других мест,
+# например, когда нам нужно указать, что две jobs
+# работают последовательно:
+# jobs:
+#   build:
+#   eslint:
+#     needs: build
+eslint:
+# имя для отображения в интерфейсе GitHub
+name: ESLint
+# обязательный параметр, который указывает где будет запущена job: облачный runner, self-hosted и т.д.
+runs-on: ubuntu-latest
+# последовательные задачи (шаги), важно помнить, что переменные окружения не сохраняются
+# между шагами и их нужно пробрасывать, если требуется.
+steps:
+# указываем action, который будет запущен как часть job
+# В текущем случае это клонирование репозитория
+- uses: actions/checkout@v2
+# Установка NVM
+# имя для отображения в интерфейсе GitHub
+- name: Install NVM
+# команда для установки NVM из официального README.md NVM
+run: curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.38.0/install.sh | bash
+# Активируем NVM
+- name: Activate NVM
+run: export NVM_DIR="$HOME/.nvm" && . "$NVM_DIR/nvm.sh" --no-use
+# Устанавливаем нужную версию Node.js 14.17.0
+- name: Install node.js
+# Мы ставим нужную версию в переменную окружения,
+# которую NVM будет использовать
+env:
+NODE_VERSION: 14.17.0
+# запускаем NVM для установки Node.js
+run: nvm install
+# Установка зависимостей проекта
+- name: Install dependencies
+run: npm install
+# Запуск ESLint
+- name: Lint source code with ESLint
+run: npm run eslint
+#+end_src
+Теперь можно [[https://github.com/vitallium/express-bookshelf-realworld-example-app/actions/runs/847570738][посмотреть]] на работу workflow. Что-то пошло не так. workflow failed по простой причине, что окружение, его переменные, не является общим для шагов, т.е. установив переменную окружения на одном шаге, мы не сможем получить ее значение на другом. Для решения этой проблемы есть несколько способов: проброс переменных окружения дальше или просто "слить" два шага в один. Для простоты возьмем второй способ.
+#+begin_src yaml
+# имя нашего workflow. Используется исключительно для отображения в интерфейсе GitHub
+name: test
+
+# правила срабатывания - события GitHub, на которые
+# должен срабатывать текущий workflow.
+on: [push]
+
+# workflow состоит из одной или нескольких job
+# job работают параллельно по умолчанию
+jobs:
+# название job, на которое можно ссылаться из других мест,
+# например, когда нам нужно указать, что две jobs
+# работают последовательно:
+# jobs:
+#   build:
+#   eslint:
+#     needs: build
+eslint:
+# имя для отображения в интерфейсе GitHub
+name: ESLint
+# обязательный параметр, который указывает где будет запущена job: облачный runner, self-hosted и т.д.
+runs-on: ubuntu-latest
+# последовательные задачи (шаги), важно помнить, что переменные окружения не сохраняются
+# между шагами и их нужно пробрасывать, если требуется.
+steps:
+# указываем action, который будет запущен как часть job
+# В текущем случае это клонирование репозитория
+- uses: actions/checkout@v2
+# Установка NVM
+# имя для отображения в интерфейсе GitHub
+- name: Install NVM
+# команда для установки NVM из официального README.md NVM
+run: curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.38.0/install.sh | bash
+# Активируем NVM и устанавливаем нужную версию Node.js
+- name: Install Node.js
+# Мы ставим нужную версию в переменную окружения,
+# которую NVM будет использовать
+env:
+NODE_VERSION: 14.17.0
+run: export NVM_DIR="$HOME/.nvm" && . "$NVM_DIR/nvm.sh" --no-use && nvm install
+# Установка зависимостей проекта
+- name: Install dependencies
+run: npm install
+# Запуск ESLint
+- name: Lint source code with ESLint
+run: npm run lint
+#+end_src
+Теперь [[https://github.com/vitallium/express-bookshelf-realworld-example-app/actions/runs/847582223][наш workflow]] стал зеленым.
+*** GitLab
+Теперь переключимся на GitLab и напишем job для GitLab CI.
+#+begin_src yaml
+# стадии нашего pipeline. Для группировки jobs.
+# Нужно помнить, что stages выполняются последовательно, а job параллельно.
+stages:
+# укажем одну стадию с именем test
+- test
+
+# создадим job с именем eslint
+eslint:
+# добавим ее в стадию test
+stage: test
+# укажем переменные окружения. В отличие от GitHub, в GitLab
+# переменные окружения являются постоянными для всей job.
+variables:
+NODE_VERSION: 14.17.0
+# секция script описывает шаги
+script:
+# установка NVM
+- curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.38.0/install.sh | bash
+# установка Node.js
+- nvm install $NODE_VERSION
+# установка зависимостей
+- npm install
+# запуск ESLint
+- npm run lint
+#+end_src
+[[https://gitlab.com/ci-cd-workshop1/express-bookshelf-realworld-example-app/-/pipelines/303688487][Наш pipeline зеленый]].
+* Prettier
+  Давайте для закрепления проделаем тоже самое для Prettier.
+  *** GitHub
+  #+begin_src yaml
+  name: prettier
+
+on: [push]
+
+jobs:
+prettier:
+runs-on: ubuntu-latest
+steps:
+- uses: actions/checkout@v2
+- name: Install nvm
+run: curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.38.0/install.sh | bash
+- name: Install node.js
+env:
+NODE_VERSION: 14.17.0
+run: nvm install $NODE_VERSION
+- name: Install dependencies
+run: npm install
+- name: Prettify our source code with Prettier
+run: npm run prettier
+#+end_src
+Как результат, [[https://github.com/vitallium/express-bookshelf-realworld-example-app/actions/runs/847610049][пайплайн все еще зеленый]].
+*** GitLab
+И добавим Prettier в GitLab CI.
+#+begin_src yaml
+# стадии нашего pipeline. Для группировки jobs.
+# Нужно помнить, что stages выполняются последовательно, а job параллельно.
+stages:
+# укажем одну стадию с именем test
+- test
+
+# создадим job с именем eslint
+eslint:
+# добавим ее в стадию test
+stage: test
+# укажем переменные окружения. В отличие от GitHub, в GitLab
+# переменные окружения являются постоянными для всей job.
+variables:
+NODE_VERSION: 14.17.0
+# секция script описывает шаги
+script:
+# установка NVM
+- curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.38.0/install.sh | bash
+# установка Node.js
+- nvm install $NODE_VERSION
+# установка зависимостей
+- npm install
+# запуск ESLint
+- npm run lint
+
+# создадим job с именем prettier
+prettier:
+# добавим ее в стадию test
+stage: test
+# укажем переменные окружения. В отличие от GitHub, в GitLab
+# переменные окружения являются постоянными для всей job.
+variables:
+NODE_VERSION: 14.17.0
+# секция script описывает шаги
+script:
+# установка NVM
+- curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.38.0/install.sh | bash
+# установка Node.js
+- nvm install $NODE_VERSION
+# установка зависимостей
+- npm install
+# запуск Prettier
+- npm run check:format
+#+end_src
+И наблюдаем [[https://gitlab.com/ci-cd-workshop1/express-bookshelf-realworld-example-app/-/pipelines/303691188][зеленый pipeline]].
+* Добавление Docker образа для ускорения pipeline
+  Наш CI запускает ESLint и Prettier на нашем коде и все хорошо, но скорость выполнения наших pipeline'ов оставляет желать лучшего.
+  Давайте попробуем ускорить их. Если посмотреть на них, то в глаза бросается, что для обоих инструментов мы выполняем практически идентичные действия:
+- Установка NVM
+- Установка Node.js
+- Установка зависимостей
+  Проведем небольшой рефакторинг и не только уберем эти повторяющиеся действия, но и ускорим наш pipeline за счет удаления установки Node.
+  *** GitHub
+  #+begin_src yaml
+# имя нашего workflow. Используется исключительно для отображения в интерфейсе GitHub
+name: test
+
+# правила срабатывания - события GitHub, на которые
+# должен срабатывать текущий workflow.
+on: [push]
+
+# workflow состоит из одной или нескольких job
+# job работают параллельно по умолчанию
+jobs:
+# название job, на которое можно ссылаться из других мест,
+# например, когда нам нужно указать, что две jobs
+# работают последовательно:
+# jobs:
+#   build:
+#   eslint:
+#     needs: build
+eslint:
+# имя для отображения в интерфейсе GitHub
+name: ESLint
+# обязательный параметр, который указывает где будет запущена job: облачный runner, self-hosted и т.д.
+runs-on: ubuntu-latest
+# укажем, что для этой job нам нужен специальный контейнер
+container:
+# возьмем Docker образ Node.js из публичного реестра
+image: node:14.17.0-alpine
+# последовательные задачи (шаги), важно помнить, что переменные окружения не сохраняются
+# между шагами и их нужно пробрасывать, если требуется.
+steps:
+# указываем action, который будет запущен как часть job
+# В текущем случае это клонирование репозитория
+- uses: actions/checkout@v2
+# Установка зависимостей проекта
+- name: Install dependencies
+run: npm install
+# Запуск ESLint
+- name: Lint source code with ESLint
+run: npm run lint
+prettier:
+# имя для отображения в интерфейсе GitHub
+name: Prettier
+# обязательный параметр, который указывает где будет запущена job: облачный runner, self-hosted и т.д.
+runs-on: ubuntu-latest
+# укажем, что для этой job нам нужен специальный контейнер
+container:
+# возьмем Docker образ Node.js из публичного реестра
+image: node:14.17.0-alpine
+# последовательные задачи (шаги), важно помнить, что переменные окружения не сохраняются
+# между шагами и их нужно пробрасывать, если требуется.
+steps:
+# указываем action, который будет запущен как часть job
+# В текущем случае это клонирование репозитория
+- uses: actions/checkout@v2
+# Установка зависимостей проекта
+- name: Install dependencies
+run: npm install
+# Запуск ESLint
+- name: Lint source code with Prettier
+run: npm run check:format
+#+end_src
+Если посмотреть на [[https://github.com/vitallium/express-bookshelf-realworld-example-app/actions/runs/847629296][результат]], то он будет. Сравнение времени выполнения уже дает нам понять, что мы поступаем верно:
+- До: 55 секунд.
+- После: 41 секунда.
+  *** GitLab
+  Давайте проделаем аналогичные действия для GitLab CI.
+  #+begin_src yaml
+# стадии нашего pipeline. Для группировки jobs.
+# Нужно помнить, что stages выполняются последовательно, а job параллельно.
+stages:
+# укажем одну стадию с именем test
+- test
+
+# создадим job с именем eslint
+eslint:
+# укажем нужный Docker образ
+image: node:14.17.0-alpine
+# добавим ее в стадию test
+stage: test
+# секция script описывает шаги
+script:
+# установка зависимостей
+- npm install
+# запуск ESLint
+- npm run lint
+
+# создадим job с именем prettier
+prettier:
+# укажем нужный Docker образ
+image: node:14.17.0-alpine
+# добавим ее в стадию test
+stage: test
+# секция script описывает шаги
+script:
+# установка зависимостей
+- npm install
+# запуск Prettier
+- npm run check:format
+#+end_src
+И [[https://gitlab.com/ci-cd-workshop1/express-bookshelf-realworld-example-app/-/pipelines/303693810][вот ссылка]] на pipeline.
+* Кеширование node_modules
+  Добавление Docker образа с предустановленной версией Node.js определенно лучше и pipeline работает быстрее, но можем еще быстрее и лучше.
+  Давайте включим кеширование =node_modules=, чтобы не устанавливать зависимости каждый раз. Хорошим тоном будет использование ключа кеширования на основе нашего =package-lock.json= файла, это необходимо для того, чтобы кеш создавался только тогда, когда меняется файл =package-lock.json=. И пока мы будем это делать, давайте поменяем сразу =npm install= на идеологически правильный =npm ci=:
+- =npm= использует файл =package-lock.json= для установки зависимостей, игнорируя =package.json=.
+- если, после установки, зависимости в =package-lock.json= не совпадают с указанными в =package.json=, то =npm= завершит работу с ошибкой. Это можно проверить путем изменения версии любой зависимости в файле =package-lock.json=.
+- =npm ci= автоматически удалит директорию =node_modules=, если таковая есть.
+- файлы =package.json= и =package-lock.json= считаются иммутабельными, то есть, их содержимое не может быть изменено.
+  Иными словами, команда =npm ci= гарантирует целостность, идемпотентность и иммутабельность нашего окружения.
+  ** GitHub
+  #+begin_src yaml
+# имя нашего workflow. Используется исключительно для отображения в интерфейсе GitHub
+name: test
+
+# правила срабатывания - события GitHub, на которые
+# должен срабатывать текущий workflow.
+on: [push]
+
+# workflow состоит из одной или нескольких job
+# job работают параллельно по умолчанию
+jobs:
+# название job, на которое можно ссылаться из других мест,
+# например, когда нам нужно указать, что две jobs
+# работают последовательно:
+# jobs:
+#   build:
+#   eslint:
+#     needs: build
+eslint:
+# имя для отображения в интерфейсе GitHub
+name: ESLint
+# обязательный параметр, который указывает где будет запущена job: облачный runner, self-hosted и т.д.
+runs-on: ubuntu-latest
+# укажем, что для этой job нам нужен специальный контейнер
+container:
+# возьмем Docker образ Node.js из публичного реестра
+image: node:14.17.0-alpine
+# последовательные задачи (шаги), важно помнить, что переменные окружения не сохраняются
+# между шагами и их нужно пробрасывать, если требуется.
+steps:
+# указываем action, который будет запущен как часть job
+# В текущем случае это клонирование репозитория
+- uses: actions/checkout@v2
+# Кеширование npm
+- name: Cache dependencies
+# включаем специальный action
+uses: actions/cache@v2
+# передаем параметры
+with:
+# что кешировать (путь)
+path: ~/.npm
+# ключ кеширования (хеш)
+key: npm-${{ hashFiles('package-lock.json') }}
+# ключ для восстановления кеша
+restore-keys: npm-
+# Установка зависимостей проекта
+- name: Install dependencies
+run: npm ci --ignore-scripts
+# Запуск ESLint
+- name: Lint source code with ESLint
+run: npm run lint
+prettier:
+# имя для отображения в интерфейсе GitHub
+name: Prettier
+# обязательный параметр, который указывает где будет запущена job: облачный runner, self-hosted и т.д.
+runs-on: ubuntu-latest
+# укажем, что для этой job нам нужен специальный контейнер
+container:
+# возьмем Docker образ Node.js из публичного реестра
+image: node:14.17.0-alpine
+# последовательные задачи (шаги), важно помнить, что переменные окружения не сохраняются
+# между шагами и их нужно пробрасывать, если требуется.
+steps:
+# указываем action, который будет запущен как часть job
+# В текущем случае это клонирование репозитория
+- uses: actions/checkout@v2
+# Кеширование npm
+- name: Cache dependencies
+# включаем специальный action
+uses: actions/cache@v2
+# передаем параметры
+with:
+# что кешировать (путь)
+path: ~/.npm
+# ключ кеширования (хеш)
+key: npm-${{ hashFiles('package-lock.json') }}
+# ключ для восстановления кеша
+restore-keys: npm-
+# Установка зависимостей проекта
+- name: Install dependencies
+run: npm install
+# Запуск ESLint
+- name: Lint source code with Prettier
+run: npm run check:format
+#+end_src
+Теперь давайте проверим наш кеш. [[https://github.com/vitallium/express-bookshelf-realworld-example-app/actions/runs/847651289][Первый запуск]] нужен для создания кеша. А вот второй уже использует его. Хм, что-то пошло не так.
+Проблема в том, что jobs в GitHub работают параллельно, а это значит что ключ кеширования используется сразу в 2 jobs. Для решения этой проблемы, давайте введем новую job =build=, которая займется созданием кеша:
+#+begin_src yaml
+# имя нашего workflow. Используется исключительно для отображения в интерфейсе GitHub
+name: test
+
+# правила срабатывания - события GitHub, на которые
+# должен срабатывать текущий workflow.
+on: [push]
+
+# workflow состоит из одной или нескольких job
+# job работают параллельно по умолчанию
+jobs:
+build:
+# имя для отображения в интерфейсе GitHub
+name: Build
+# обязательный параметр, который указывает где будет запущена job: облачный runner, self-hosted и т.д.
+runs-on: ubuntu-latest
+# укажем, что для этой job нам нужен специальный контейнер
+container:
+# возьмем Docker образ Node.js из публичного реестра
+image: node:14.17.0-alpine
+# последовательные задачи (шаги), важно помнить, что переменные окружения не сохраняются
+# между шагами и их нужно пробрасывать, если требуется.
+steps:
+# указываем action, который будет запущен как часть job
+# В текущем случае это клонирование репозитория
+- uses: actions/checkout@v2
+# Кеширование npm
+- name: Cache dependencies
+# включаем специальный action
+uses: actions/cache@v2
+# передаем параметры
+with:
+# что кешировать (путь)
+path: ~/.npm
+# ключ кеширования (хеш)
+key: npm-${{ hashFiles('package-lock.json') }}
+# ключ для восстановления кеша
+restore-keys: npm-
+# Установка зависимостей проекта
+- name: Install dependencies
+run: npm ci --ignore-scripts
+# название job, на которое можно ссылаться из других мест,
+# например, когда нам нужно указать, что две jobs
+# работают последовательно:
+# jobs:
+#   build:
+#   eslint:
+#     needs: build
+eslint:
+needs: build
+# имя для отображения в интерфейсе GitHub
+name: ESLint
+# обязательный параметр, который указывает где будет запущена job: облачный runner, self-hosted и т.д.
+runs-on: ubuntu-latest
+# укажем, что для этой job нам нужен специальный контейнер
+container:
+# возьмем Docker образ Node.js из публичного реестра
+image: node:14.17.0-alpine
+# последовательные задачи (шаги), важно помнить, что переменные окружения не сохраняются
+# между шагами и их нужно пробрасывать, если требуется.
+steps:
+# указываем action, который будет запущен как часть job
+# В текущем случае это клонирование репозитория
+- uses: actions/checkout@v2
+# Кеширование npm
+- name: Cache dependencies
+# включаем специальный action
+uses: actions/cache@v2
+# передаем параметры
+with:
+# что кешировать (путь)
+path: ~/.npm
+# ключ кеширования (хеш)
+key: npm-${{ hashFiles('package-lock.json') }}
+# ключ для восстановления кеша
+restore-keys: npm-
+# Запуск ESLint
+- name: Lint source code with ESLint
+run: npm run lint
+prettier:
+needs: build
+# имя для отображения в интерфейсе GitHub
+name: Prettier
+# обязательный параметр, который указывает где будет запущена job: облачный runner, self-hosted и т.д.
+runs-on: ubuntu-latest
+# укажем, что для этой job нам нужен специальный контейнер
+container:
+# возьмем Docker образ Node.js из публичного реестра
+image: node:14.17.0-alpine
+# последовательные задачи (шаги), важно помнить, что переменные окружения не сохраняются
+# между шагами и их нужно пробрасывать, если требуется.
+steps:
+# указываем action, который будет запущен как часть job
+# В текущем случае это клонирование репозитория
+- uses: actions/checkout@v2
+# Кеширование npm
+- name: Cache dependencies
+# включаем специальный action
+uses: actions/cache@v2
+# передаем параметры
+with:
+# что кешировать (путь)
+path: ~/.npm
+# ключ кеширования (хеш)
+key: npm-${{ hashFiles('package-lock.json') }}
+# ключ для восстановления кеша
+restore-keys: npm-
+# Запуск ESLint
+- name: Lint source code with Prettier
+run: npm run check:format
+#+end_src
+Альтернативным решением является перенос ESLint и Prettier в одну job, но что делать, когда линтеров будет много :)
+** GitLab
+#+begin_src yaml
+# стадии нашего pipeline. Для группировки jobs.
+# Нужно помнить, что stages выполняются последовательно, а job параллельно.
+stages:
+# укажем одну стадию с именем test
+- test
+
+# укажем нужный Docker образ глобально
+image: node:14.17.0-alpine
+
+# определим кеширование
+cache:
+# ключ кеширования
+key:
+# файл или файлы
+files:
+# наш lock-файл с зависимостями
+- package-lock.json
+# что кешировать
+paths:
+- .npm/
+
+# определим новую секцию для подготовки кеша
+before_script:
+- npm ci --cache .npm --prefer-offline
+
+# создадим job с именем eslint
+eslint:
+# добавим ее в стадию test
+stage: test
+# секция script описывает шаги
+script:
+# запуск ESLint
+- npm run lint
+
+# создадим job с именем prettier
+prettier:
+# добавим ее в стадию test
+stage: test
+# секция script описывает шаги
+script:
+# запуск Prettier
+- npm run check:format
+#+end_src
+Посмотрим на время выполнения pipeline после двух запусков:
+- [[https://gitlab.com/ci-cd-workshop1/express-bookshelf-realworld-example-app/-/pipelines/303700615][первый запуск]] - 46 секунд.
+- [[https://gitlab.com/ci-cd-workshop1/express-bookshelf-realworld-example-app/-/pipelines/303702720][второй запуск]] - 39 секунд.
+* Настройка сервера для развертывания приложений
+  Давайте теперь займемся окружением для деплоя. Возьмем "чистый" сервер и проведем его первоначальную настройку.
+  ** Создадим SSH ключ для CI и деплоя
+  #+begin_src sh
+  ssh-keygen -f ~/.ssh/ci-key -t ecdsa -b 521 -C "vitaliy.slobodin@gmail.com"
+  #+end_src
+  *** Создадим пользователя, под которым будет работать наше приложение
+  #+begin_src sh
+  useradd -s /bin/bash -m -d /home/deploy -c "deploy" deploy
+  #+end_src
+  *** Зададим ему пароль
+  #+begin_src sh
+  passwd deploy
+  #+end_src
+  ** Скопируем SSH ключ на сервер для пользователя deploy
+
+#+begin_src sh
+ssh-copy-id -i ~/.ssh/ci-key.pub deploy@172.104.151.230
+#+end_src
+Обратите внимание, что для =ssh-copy-id= мы передаем наш ключ через опцию =i=. В дальнейшем, если вы захотите самостоятельно зайти под пользователем =deploy= на сервер, то вам надо будет передать ключ и для команды =ssh=.
+#+begin_src sh
+ssh -i ~/.ssh/ci-key.pub deploy@172.104.151.230
+#+end_src
+** Удалим ненужные пакеты и поставим нужные нам
+*** Обновим наш сервер
+#+begin_src sh
+apt update -qq update && apt -qq -y upgrade
+#+end_src
+*** Добавим Node.js в наш пакетный менеджер (в источники).
+#+begin_src sh
+curl -fsSL https://deb.nodesource.com/setup_14.x | bash -
+#+end_src
+*** Установим Node.js и Nginx
+#+begin_src sh
+apt install -y nodejs nginx
+#+end_src
+*** Установим pm2
+#+begin_src sh
+npm install -g pm2
+#+end_src
+*** Добавим pm2 в автозагрузку при помощи =systemd= с запуском от пользователя =deploy=.
+#+begin_src sh
+env PATH=$PATH:/usr/bin pm2 startup systemd -u deploy --hp /home/deploy
+#+end_src
+** Немного подкрутим брандмауэр
+*** Разрешим подключение по SSH.
+#+begin_src sh
+ufw allow 'OpenSSH'
+#+end_src
+Разрешим подключение по 80 и 443 портам.
+#+begin_src sh
+ufw allow 'Nginx Full'
+#+end_src
+*** Включим брандмауэр.
+#+begin_src sh
+ufw enable -y
+#+end_src
+** Установим и настроим базу данных
+*** Установим =PostgreSQL= из репозитория.
+#+begin_src sh
+apt install -y postgresql postgresql-contrib
+#+end_src
+*** Создадим новую базу данных с именем =realworld=.
+#+begin_src sh
+su postgres - createdb realworld
+#+end_src
+*** Переключимся под пользователя =psql=.
+#+begin_src sh
+su postgres - psql
+#+end_src
+*** Создадим нового пользователя с именем =realworld= и таким же паролем.
+И дадим ему полные права только на базу данных =realworld=.
+#+begin_src sql
+CREATE USER realworld WITH ENCRYPTED PASSWORD 'realworld';
+GRANT ALL PRIVILEGES ON DATABASE realworld TO realworld;
+#+end_src
+** Настроим nginx
+Создадим файл конфигурации в =/etc/nginx/sites-available/realworld.conf=.
+#+begin_src conf
+upstream backend {
+server 127.0.0.1:3000;
+keepalive 64;
+}
+
+server {
+listen 80 default_server;
+server_name app.172.104.151.230.nip.io;
+index index.html;
+root /home/deploy/realworld/public;
+
+    location /api {
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header Host $http_host;
+
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "upgrade";
+
+        proxy_pass http://backend;
+        proxy_redirect off;
+        proxy_read_timeout 240s;
+    }
+}
+#+end_src
+Теперь создадим символьную ссылку этого файла конфигурации в директорию
+с включенными конфигурациями =nginx=.
+#+begin_src sh
+ln -s /etc/nginx/sites-available/realworld.conf /etc/nginx/sites-enabled/
+#+end_src
+Проверим, что конфигурация верна.
+#+begin_src sh
+nginx -t
+#+end_src
+Перезагрузим =nginx=.
+#+begin_src sh
+service nginx restart
+#+end_src
+** Настроим pm2 под наше приложение
+Создадим файл =ecosystem.config.js= в =/home/deploy/=:
+#+begin_src conf
+module.exports = {
+apps : [{
+name: 'realworld',
+script: 'realworld/lib/server.js',
+'env': {
+'NODE_ENV': 'production',
+'DB_NAME': 'realworld',
+'DB_PASSWORD': 'realworld',
+'DB_USER': 'realworld',
+'SECRET': 'realworld',
+},
+}],
+};
+#+end_src
+* Настройка сборки и деплоя
+  Теперь перейдет непосредственно к настройке сборки и развертывания нашего приложения. Начнем с =backend=.
+  ** Backend
+  Прежде чем создавать новый =workflow= нам понадобится добавить 2 секретные переменные для доступа на наш сервер:
+- =SSH_PRIVATE_KEY= - приватная часть SSH ключа, который мы создали ранее.
+- =SSH_KNOWN_HOSTS= - публичный ключ для нашего сервера, который SSH использует для проверки легитимности.
+  В GitHub добавление новых секретов для actions происходит в настройках репозитория, например, в моем случае это [[https://github.com/vitallium/express-bookshelf-realworld-example-app/settings/secrets/actions][тут]].
+  Создадим новый файл =workflow= в =.github/workflows/deploy.yml= со следующим содержимым:
+  *** GitHub
+  #+begin_src yaml
+  name: Deploy
+
+on:
+push:
+branches: [main]
+
+# специальное событие, которое происходит при ручном вызове workflow
+workflow_dispatch:
+
+jobs:
+deploy:
+runs-on: ubuntu-latest
+steps:
+- uses: actions/checkout@v2
+- name: Setup SSH
+run: |
+# создаем директорию для ключа
+mkdir -p ~/.ssh
+# выводим содержимое нашей переменной окружения в файл
+echo "$SSH_PRIVATE_KEY" > ~/.ssh/id_rsa
+# ставим нужные безопасные права
+chmod 700 ~/.ssh
+chmod 600 ~/.ssh/id_rsa
+# Добавляем отпечаток сервера
+echo "$SSH_KNOWN_HOSTS" >> ~/.ssh/known_hosts
+env:
+SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
+SSH_KNOWN_HOSTS: ${{ secrets.SSH_KNOWN_HOSTS }}
+- name: Copy files to the server
+# заливаем файлы при помощи rsync
+run: |
+rsync -a --progress --human-readable --delete \
+# исключить все, что есть в .gitignore
+--exclude-from '.gitignore' \
+# не загружаем .gitignore
+--exclude .gitignore \
+# не загружаем .git
+--exclude .git \
+# Не удаляем директорию с нашим фронтендом
+--exclude public \
+. deploy@172.104.151.230:~/realworld/
+# job для перезапуска приложения при помощи pm2
+- name: Restart the application
+run: |
+ssh deploy@172.104.151.230 "pushd ~/realworld && npm install && popd && pm2 restart ecosystem.config.js"
+#+end_src
+Но нужно помнить, что =lint= работает на событие =push= в *любую* ветку. Этот триггер является не совсем верным, мы же хотим проверять
+код перед слиняем. Давайте модифицируем его на срабатывание только на =pull request=. В файле =.github/workflows/test.yml=:
+#+begin_src yaml
+# имя нашего workflow. Используется исключительно для отображения в интерфейсе GitHub
+name: test
+
+# правила срабатывания - события GitHub, на которые
+# должен срабатывать текущий workflow.
+on: [pull_request]
+
+# workflow состоит из одной или нескольких job
+# job работают параллельно по умолчанию
+jobs:
+eslint:
+# имя для отображения в интерфейсе GitHub
+name: ESLint
+# обязательный параметр, который указывает где будет запущена job: облачный runner, self-hosted и т.д.
+runs-on: ubuntu-latest
+# укажем, что для этой job нам нужен специальный контейнер
+container:
+# возьмем Docker образ Node.js из публичного реестра
+image: node:14.17.0-alpine
+# последовательные задачи (шаги), важно помнить, что переменные окружения не сохраняются
+# между шагами и их нужно пробрасывать, если требуется.
+steps:
+# указываем action, который будет запущен как часть job
+# В текущем случае это клонирование репозитория
+- uses: actions/checkout@v2
+# Кеширование npm
+- name: Cache dependencies
+# включаем специальный action
+uses: actions/cache@v2
+# передаем параметры
+with:
+# что кешировать (путь)
+path: ~/.npm
+# ключ кеширования (хеш)
+key: npm-${{ hashFiles('package-lock.json') }}
+# ключ для восстановления кеша
+restore-keys: npm-
+# Установка зависимостей проекта
+- name: Install dependencies
+run: npm ci --ignore-scripts
+# Запуск ESLint
+- name: Lint source code with ESLint
+run: npm run lint
+prettier:
+# имя для отображения в интерфейсе GitHub
+name: Prettier
+# обязательный параметр, который указывает где будет запущена job: облачный runner, self-hosted и т.д.
+runs-on: ubuntu-latest
+# укажем, что для этой job нам нужен специальный контейнер
+container:
+# возьмем Docker образ Node.js из публичного реестра
+image: node:14.17.0-alpine
+# последовательные задачи (шаги), важно помнить, что переменные окружения не сохраняются
+# между шагами и их нужно пробрасывать, если требуется.
+steps:
+# указываем action, который будет запущен как часть job
+# В текущем случае это клонирование репозитория
+- uses: actions/checkout@v2
+# Кеширование npm
+- name: Cache dependencies
+# включаем специальный action
+uses: actions/cache@v2
+# передаем параметры
+with:
+# что кешировать (путь)
+path: ~/.npm
+# ключ кеширования (хеш)
+key: npm-${{ hashFiles('package-lock.json') }}
+# ключ для восстановления кеша
+restore-keys: npm-
+# Установка зависимостей проекта
+- name: Install dependencies
+run: npm install
+# Запуск ESLint
+- name: Lint source code with Prettier
+run: npm run check:format
+#+end_src
+Посмотреть как это выглядит можно вот [[https://github.com/vitallium/express-bookshelf-realworld-example-app/pull/3][тут]]. Но это только pull request, давайте посмотрим на pipeline непосредственно деплоя.
+*** GitLab
+** Frontend
+*** GitHub
+Теперь дело за frontend. Создаем workflow по аналогии, но помня о том, что нам еще потребуется сборка, а для этого нам нужно будет воспользоваться [[https://docs.github.com/en/actions/guides/storing-workflow-data-as-artifacts][артефактами]]. Нюанс, в нашем приложении по умолчанию используется http://localhost:3000 в качестве API URL. А мы будем использовать http://localhost:3000/api, хорошо, что приложению можно передать свою ссылку на API URL, поэтому в настройках репозитория, в секретах, создадим новую переменную с именем =API_URL= и поставим значение http://app.172.104.151.230.nip.io/api. [[https://nip.io/][nip.io]] это специальный сервис, который делает нам бесплатное разрешение доменного имени через IP адрес.
+Создадим новый файл =.github/workflows/deploy.yml=. Давайте еще, дополнительно, вынесем туда IP адрес (=SSH_HOST=) и имя пользователя (=SSH_USER=).
+#+begin_src yaml
+name: Build and Deploy
+
+on:
+push:
+branches: [main]
+
+# специальное событие, которое происходит при ручном вызове workflow
+workflow_dispatch:
+
+jobs:
+build_and_deploy:
+runs-on: ubuntu-latest
+steps:
+# указываем action, который будет запущен как часть job
+# В текущем случае это клонирование репозитория
+- uses: actions/checkout@v2
+# Кеширование npm
+- name: Cache dependencies
+# включаем специальный action
+uses: actions/cache@v2
+# передаем параметры
+with:
+# что кешировать (путь)
+path: ~/.npm
+# ключ кеширования (хеш)
+key: npm-${{ hashFiles('package-lock.json') }}
+# ключ для восстановления кеша
+restore-keys: npm-
+- name: Install dependencies
+run: npm ci --ignore-scripts
+# Запуск сборки
+- name: Build
+run: npm run build
+env:
+REACT_APP_BACKEND_URL: ${{ secrets.API_URL }}
+# Дальше по аналогии с backend, просто загружаем на сервер
+- name: Setup SSH
+run: |
+# создаем директорию для ключа
+mkdir -p ~/.ssh
+# выводим содержимое нашей переменной окружения в файл
+echo "$SSH_PRIVATE_KEY" > ~/.ssh/id_rsa
+# ставим нужные безопасные права
+chmod 700 ~/.ssh
+chmod 600 ~/.ssh/id_rsa
+# Добавляем отпечаток сервера
+echo "$SSH_KNOWN_HOSTS" >> ~/.ssh/known_hosts
+env:
+SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
+SSH_KNOWN_HOSTS: ${{ secrets.SSH_KNOWN_HOSTS }}
+- name: Copy files to the server
+run: |
+# воспользуемся SCP здесь, т.к. нам просто нужно загрузить из
+# одной директории
+scp -r build/* $SSH_USER@$SSH_HOST:~/realworld/public
+env:
+SSH_HOST: ${{ secrets.SSH_HOST }}
+SSH_USER: ${{ secrets.SSH_USER }}
+#+end_src
+*** GitLab
+#+begin_src yaml
+stages:
+- lint
+- deploy
+
+image: node:14.17.0-alpine
+
+cache:
+key:
+files:
+- package-lock.json
+paths:
+- .npm/
+
+before_script:
+- npm ci --cache .npm --prefer-offline
+
+eslint:
+stage: lint
+script:
+- npm run lint
+
+prettier:
+stage: lint
+script:
+- npm run check:format
+
+deploy:
+stage: deploy
+script:
+- apk --update add openssh-client scp
+- eval $(ssh-agent -s)
+- echo "$SSH_PRIVATE_KEY" | tr -d '\r' | ssh-add -
+- mkdir -p ~/.ssh
+- chmod 700 ~/.ssh
+- echo "$SSH_KNOWN_HOSTS" > ~/.ssh/known_hosts
+- npm run build
+- scp -r build/* $SSH_USER@$SSH_HOST:~/realworld/public
+#+end_src
+* Разбиваем сборку и деплой
+  Все выглядит хорошо и работает, но, кажется, job делает слишком много. Давайте привнесем немного =S= из =SOLID= и разобьем сборку и деплой на собственные шаги.
+  ** Frontend
+  *** GitHub
+  #+begin_src yaml
+  name: Build and Deploy
+
+on:
+push:
+branches: [main]
+
+# специальное событие, которое происходит при ручном вызове workflow
+workflow_dispatch:
+
+jobs:
+# помним, что прежде всего, надо собрать фронтенд при помощи webpack
+build:
+runs-on: ubuntu-latest
+# укажем, что для этой job нам нужен специальный контейнет
+container:
+# возьмем Docker образ Node.js из публичного реестра
+image: node:14.17.0-alpine
+# последовательные задачи (шаги), важно помнить, что переменные окружения не сохраняются
+# между шагами и их нужно пробрасывать, если требуется.
+steps:
+# указываем action, который будет запущен как часть job
+# В текущем случае это клонирование репозитория
+- uses: actions/checkout@v2
+# Кеширование npm
+- name: Cache dependencies
+# включаем специальный action
+uses: actions/cache@v2
+# передаем параметры
+with:
+# что кешировать (путь)
+path: ~/.npm
+# ключ кеширования (хеш)
+key: npm-${{ hashFiles('package-lock.json') }}
+# ключ для восстановления кеша
+restore-keys: npm-
+- name: Install dependencies
+run: npm ci --ignore-scripts
+# Запуск сборки
+- name: Build
+run: npm run build
+env:
+REACT_APP_BACKEND_URL: ${{ secrets.API_URL }}
+# Теперь загружаем артефакты
+- name: Archive build
+uses: actions/upload-artifact@v2
+with:
+name: build
+path: build
+deploy:
+# укажем, что для деплоя нам нужно сначала собрать приложение
+needs: build
+runs-on: ubuntu-latest
+steps:
+# загружаем ранее сохраненные артефакты
+- name: Download a single artifact
+uses: actions/download-artifact@v2
+with:
+name: build
+# Дальше по аналогии с backend, просто загружаем на сервер
+- name: Setup SSH
+run: |
+# создаем директорию для ключа
+mkdir -p ~/.ssh
+# выводим содержимое нашей переменной окружения в файл
+echo "$SSH_PRIVATE_KEY" > ~/.ssh/id_rsa
+# ставим нужные безопасные права
+chmod 700 ~/.ssh
+chmod 600 ~/.ssh/id_rsa
+# Добавляем отпечаток сервера
+echo "$SSH_KNOWN_HOSTS" >> ~/.ssh/known_hosts
+env:
+SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
+SSH_KNOWN_HOSTS: ${{ secrets.SSH_KNOWN_HOSTS }}
+- name: Copy files to the server
+run: |
+# воспользуемся SCP здесь, т.к. нам просто нужно загрузить из
+# одной директории
+scp -r build/* $SSH_USER@$SSH_HOST:~/realworld/public
+env:
+SSH_HOST: ${{ secrets.SSH_HOST }}
+SSH_USER: ${{ secrets.SSH_USER }}
+#+end_src
+*** GitLab
+Помним, что после сборки нам нужно сохранить наш билд в виде артефактов и передать его на стадию =deploy=.
+#+begin_src yaml
+stages:
+- lint
+- build
+- deploy
+
+image: node:14.17.0-alpine
+
+cache:
+key:
+files:
+- package-lock.json
+paths:
+- .npm/
+
+before_script:
+- npm ci --cache .npm --prefer-offline
+
+eslint:
+stage: lint
+script:
+- npm run lint
+
+prettier:
+stage: lint
+script:
+- npm run check:format
+
+build:
+stage: build
+script:
+- npm run build
+artifacts:
+paths:
+- build
+expire_in: 1 week
+
+deploy:
+stage: deploy
+script:
+- apk --update add openssh-client scp
+- eval $(ssh-agent -s)
+- echo "$SSH_PRIVATE_KEY" | tr -d '\r' | ssh-add -
+- mkdir -p ~/.ssh
+- chmod 700 ~/.ssh
+- echo "$SSH_KNOWN_HOSTS" > ~/.ssh/known_hosts
+- scp -r build/* $SSH_USER@$SSH_HOST:~/realworld/public
+#+end_src
+* Различия между GitLab CI и GitHub Actions
+  В итоге наши пайплайны, которые мы получили, выглядят почти одинаково в любой CI.
+  Отличие Github Actions от GitLab CI - “социальность”. GitLab запускает консольные команды,
+  а у GitHub есть более высокоуровневое понятие actions, которые пишутся другими людьми и доступны для использования.
+  Давайте переключимся на использование таковых GitHub Actions в pipeline.
+  ** Начнем с установки Node.js
+  #+begin_src yaml
+  name: Build and Deploy
+
+on:
+push:
+branches: [main]
+workflow_dispatch:
+
+jobs:
+build:
+runs-on: ubuntu-latest
+steps:
+- uses: actions/checkout@v2
+- uses: actions/setup-node@v2
+with:
+node-version: '14'
+- run: npm install
+- name: Build
+run: npm run build
+env:
+REACT_APP_BACKEND_URL: ${{ secrets.API_URL }}
+- name: Archive build
+uses: actions/upload-artifact@v2
+with:
+name: build
+path: build
+deploy:
+needs: build
+runs-on: ubuntu-latest
+steps:
+- name: Download a single artifact
+uses: actions/download-artifact@v2
+with:
+name: build
+path: build
+- name: Copy build to the server
+uses: appleboy/scp-action@v0.1.1
+with:
+host: ${{ secrets.SSH_HOST }}
+username: ${{ secrets.SSH_USER }}
+key: ${{ secrets.SSH_PRIVATE_KEY }}
+rm: true
+source: build/*
+target: "~/realworld/public"
+env:
+SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
+SSH_KNOWN_HOSTS: ${{ secrets.SSH_KNOWN_HOSTS }}
+SSH_HOST: ${{ secrets.SSH_HOST }}
+SSH_USER: ${{ secrets.SSH_USER }}
+#+end_src
+Нужно главное помнить, что GitHub Actions пишутся другими людьми, и код лучше проверять.
+* Полезные ссылки
+- [[https://docs.github.com/en/actions/reference/workflow-syntax-for-github-actions][Синтаксис GitHub Workflow]]
+- [[https://docs.gitlab.com/ee/ci/][Документация по GitLab CI]]
+- [[https://github.com/nvm-sh/nvm][Node Version Manager]]

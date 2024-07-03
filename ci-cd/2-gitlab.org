@@ -1,0 +1,527 @@
+#+title: CI/CD Workshop #2 GitLab
+#+roam_tags: gitlab ci-cd-workshop
+#+PROPERTY: header-args :results silent :noweb yes :exports code
+#+LAST_MODIFIED: <2021-06-15 Tue>
+
+* Contents :TOC:
+- [[#модернизация-развертывания-для-поддержки-review-apps][Модернизация развертывания для поддержки Review Apps]]
+    - [[#настройка-ssh-доступа][Настройка SSH доступа]]
+    - [[#переменные-окружения][Переменные окружения]]
+    - [[#script][Script]]
+    - [[#окружение][Окружение]]
+    - [[#правила][Правила]]
+- [[#настройка-nginx-для-функционала-review-apps][Настройка NGINX для функционала Review Apps]]
+- [[#создание-job-для-развертывания-review-app][Создание Job для развертывания Review App]]
+- [[#добавление-информации-об-успешном-создании-review-app][Добавление информации об успешном создании Review App]]
+- [[#пропуск-создания-review-app-при-заданных-условиях][Пропуск создания Review App при заданных условиях]]
+- [[#frontend--backend--][Frontend + Backend = ❤]]
+- [[#используем-gitlab-api-для-запуска-pipeline][Используем GitLab API для запуска pipeline]]
+    - [[#backend][Backend]]
+    - [[#frontend][Frontend]]
+- [[#сброс-базы-данных-до-начального-состояния][Сброс базы данных до начального состояния]]
+- [[#ссылки][Ссылки]]
+
+* Модернизация развертывания для поддержки Review Apps
+  В прошлом мы разворачивали приложение вручную, простым копированием, но это неудобно
+  и добавляет лишнего кода в наш CI. Давайте по аналогии с GitHub переделаем развертывание
+  на PM2.
+  Но прежде давайте избавимся от устаревшего синтаксиса и вынесем общие части в =default=.
+  #+begin_src yaml
+  default:
+  image: node:14.17.0-alpine
+  cache:
+  key:
+  files:
+  - package-lock.json
+  paths:
+  - .npm/
+  before_script:
+    - npm ci --cache .npm --prefer-offline
+      #+end_src
+      И создадим [[https://docs.gitlab.com/ee/ci/yaml/README.html#hide-jobs][скрытую job]] для настройки SSH доступа.
+      #+begin_src yaml
+      .setup_ssh:
+      before_script:
+    - 'which ssh-agent || (apk add --update openssh curl bash git)'
+    - eval $(ssh-agent -s)
+    - echo "$SSH_PRIVATE_KEY" | tr -d '\r' | ssh-add -
+    - mkdir -p ~/.ssh
+    - chmod 700 ~/.ssh
+    - echo "$SSH_KNOWN_HOSTS" > ~/.ssh/known_hosts
+      #+end_src
+      Теперь можно переходить к =deploy=.
+      #+begin_src yaml
+      deploy:
+      extends:
+    - .setup_ssh
+      stage: deploy
+      variables:
+      REPOSITORY_URL: 'git@gitlab.com:ci-cd-workshop1/backend.git'
+      DEPLOY_BRANCH: $CI_COMMIT_REF_NAME
+      DEPLOY_DST: '/home/deploy/app/$CI_COMMIT_REF_SLUG'
+      DB_NAME: $CI_COMMIT_REF_SLUG
+      script:
+    - npm i -g pm2
+    - ssh -q $SSH_USER@$SSH_HOST [[ ! -d "$DEPLOY_DST" ]] && pm2 deploy ecosystem.config.js production setup
+    - |
+      ssh -q $SSH_USER@$SSH_HOST <<EOF
+      echo "DB_NAME=$DB_NAME" > $DEPLOY_DST/.env
+      echo "DB_USER=$DB_USER" >> $DEPLOY_DST/.env
+      echo "DB_PASSWORD=$DB_PASSWORD" >> $DEPLOY_DST/.env
+      echo "SECRET=$SECRET" >> $DEPLOY_DST/.env
+      EOF
+    - pm2 deploy ecosystem.config.js production --update-env
+      environment:
+      name: production
+      url: http://$CI_COMMIT_REF_SLUG.$APP_HOST/
+      rules:
+    - if: $CI_COMMIT_BRANCH == 'main'
+      #+end_src
+      Давайте разберем подробнее каждое изменение.
+      ** Настройка SSH доступа
+      #+begin_src yaml
+      extends:
+    - .setup_ssh
+      #+end_src
+      Наследуем скрытую job для настройки SSH доступа. Главное отличие =extends= от якорей в YAML это то, что =extends= работает по принципу:
+      #+begin_quote
+      Кто последний встал, того и тапки.
+      #+end_quote
+      Это касается только массивом и значит то, что последний наследуемый элемент и он сам затирает все предыдущие массивы, возьмем для примера такой код:
+      #+begin_src yaml
+      foo:
+      script:
+    - a
+    - b
+    - c
+
+foa:
+script:
+- x
+- y
+- z
+
+job:
+extends:
+- foo
+- foa
+#+end_src
+Массив =bar= будет иметь значения только из =foa=:
+#+begin_src yaml
+foo:
+script:
+- a
+- b
+- c
+  foa:
+  script:
+- x
+- y
+- z
+  job:
+  script:
+- x
+- y
+- z
+  extends:
+- foo
+- foa
+  #+end_src
+  Поэтому нужно понимать разницу и необходимость использования якорей и =extends=.
+  ** Переменные окружения
+  #+begin_src yaml
+  variables:
+  REPOSITORY_URL: 'git@gitlab.com:ci-cd-workshop1/backend.git'
+  DEPLOY_BRANCH: $CI_COMMIT_REF_NAME
+  DEPLOY_DST: '/home/deploy/app/$CI_COMMIT_REF_SLUG'
+  DB_NAME: $CI_COMMIT_REF_SLUG
+  #+end_src
+- =REPOSITORY_URL= ссылка на репозиторий, нужна для того, чтобы передать ее в =pm2= для клонирования.
+- =DEPLOY_BRANCH= аналогично. Передадим ее =pm2= для клонирования определенной ветки. В этом примере мы используем встроенную в GitLab CI переменную =CI_COMMIT_REF_NAME=, которая содержит имя ветки, на котором работает pipeline.
+- =DEPLOY_DST= аналогично. Содержит путь на удаленном сервере, куда нужно развернуть приложение.
+- =DB_NAME= аналогично, но эту переменную мы также будем использовать для именования нашего приложения и имени базы данных. Тоже используем встроенную переменную =CI_COMMIT_REF_SLUG=, которая содержит имя ветки, но без символов, которые нельзя использовать в имени пути.
+  ** Script
+  Теперь перейдет к скрипту, который будет выполняться.
+  #+begin_src yaml
+  script:
+    - npm i -g pm2
+    - ssh -q $SSH_USER@$SSH_HOST [[ ! -d "$DEPLOY_DST" ]] && pm2 deploy ecosystem.config.js production setup
+    - |
+      ssh -q $SSH_USER@$SSH_HOST <<EOF
+      echo "DB_NAME=$DB_NAME" > $DEPLOY_DST/.env
+      echo "DB_USER=$DB_USER" >> $DEPLOY_DST/.env
+      echo "DB_PASSWORD=$DB_PASSWORD" >> $DEPLOY_DST/.env
+      echo "SECRET=$SECRET" >> $DEPLOY_DST/.env
+      EOF
+    - pm2 deploy ecosystem.config.js production --update-env
+      #+end_src
+      Так как мы будем использовать =pm2= для развертывания, то нужно поставить его глобально ~npm i -g pm2~.
+      Дальше у нас задача такая, если это первое развертывание, то нам необходимо настроить сервер под наше приложение, это можно делегировать =pm2=, но с одной оговоркой - это нужно сделать только один раз. Поэтому мы пойдем простым путем и проверим наличие =DEPLOY_DST= на сервере, если директория есть, то мы ничего не делаем, иначе запускаем =pm2= с ключами для настройки окружения =production setup=.
+      #+begin_src yaml
+      ssh -q $SSH_USER@$SSH_HOST [[ ! -d "$DEPLOY_DST" ]] && pm2 deploy ecosystem.config.js production setup
+      #+end_src
+      Теперь нам нужно передать переменные окружения необходимые для работы нашего приложения. Так как у нас в приложении есть поддержка файлов =.env=, давайте пойдем самым простым путем и просто создадим прямо на сервере этот файл.
+      #+begin_src yaml
+      ssh -q $SSH_USER@$SSH_HOST <<EOF
+      echo "DB_NAME=$DB_NAME" > $DEPLOY_DST/.env
+      echo "DB_USER=$DB_USER" >> $DEPLOY_DST/.env
+      echo "DB_PASSWORD=$DB_PASSWORD" >> $DEPLOY_DST/.env
+      echo "SECRET=$SECRET" >> $DEPLOY_DST/.env
+      EOF
+      #+end_src
+      Заходим на сервер по SSH и создаем файл =$DEPLOY_DST/.env= со всеми нужными переменными.
+      Последний шаг это запустить =pm2= для развертывания.
+      #+begin_src yaml
+      pm2 deploy ecosystem.config.js production --update-env
+      #+end_src
+      ** Окружение
+      GitLab поддерживает окружения (production или staging), при помощи которых мы можем сообщать команде о развертывании нового окружения или его обновлении и управлять ими. Для того, чтобы включить их, нам надо определить окружение при помощи ключа =environment=.
+      #+begin_src yaml
+      environment:
+      name: production
+      url: http://$CI_COMMIT_REF_SLUG.$APP_HOST/
+      #+end_src
+      В качестве имени задаем =production=. А в качестве ссылки можно было просто задать =http://main.$APP_HOST/=, но если мы поменяем название нашей production ветки на другое, то нам придется и поменять ссылку. Давайте просто использовать встроенную переменную с именем ветки.
+      ** Правила
+      Тут зададим просто правило, когда pipeline должен сработать это название бранча равное =main=.
+      #+begin_src yaml
+      rules:
+    - if: $CI_COMMIT_BRANCH == 'main'
+      #+end_src
+
+* Настройка NGINX для функционала Review Apps
+  Теперь настроим NGINX для работы с Review Apps. Суть заключается в том, чтобы научить nginx по запрашиваемому поддомену использовать приложение из соответствующей директории.
+
+Для начала пойдем простым путем и сделаем простое регулярное выражение для сохранения нашего поддомена, оно же название нашей ветки.
+#+begin_src conf
+server {
+server_name ~(?<branch>[^\.]*)\.172-104-151-230\.nip\.io$;
+}
+#+end_src
+
+Теперь у нас есть переменная =$branch= с названием нашей ветки. Не забудем ее подставить в корневой путь до приложения.
+#+begin_src conf
+server {
+server_name ~(?<branch>[^\.]*)\.172-104-151-230\.nip\.io$;
+root /home/deploy/app/$branch/current/public;
+}
+#+end_src
+
+У нас есть имя нашей ветки, а значит мы можем использовать верное API приложение для запрошенной Review App.
+Для удобства сформируем путь до сокета нашего приложения с учетом запрошенного имени приложения.
+#+begin_src conf
+server {
+server_name ~(?<branch>[^\.]*)\.172-104-151-230\.nip\.io$;
+root /home/deploy/app/$branch/current/public;
+
+location /api/ {
+set $pass_socket http://unix:/home/deploy/app/$branch/current/tmp/pids/server.sock;
+}
+}
+#+end_src
+
+Добавим заголовки для корректного проброса запроса.
+#+begin_src conf
+server {
+server_name ~(?<branch>[^\.]*)\.172-104-151-230\.nip\.io$;
+root /home/deploy/app/$branch/current/public;
+
+location /api/ {
+set $pass_socket http://unix:/home/deploy/app/$branch/current/tmp/pids/server.sock;
+
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_set_header X-Real-IP $remote_addr;
+    proxy_set_header Host $http_host;
+
+    proxy_http_version 1.1;
+    proxy_set_header Upgrade $http_upgrade;
+    proxy_set_header Connection "upgrade";
+}
+}
+#+end_src
+
+И финальный вариант конфигурации.
+#+begin_src nginx
+server {
+listen 80 default_server;
+
+server_name ~(?<branch>[^\.]*)\.172-104-151-230\.nip\.io$;
+access_log /var/log/nginx/branch-access.log;
+error_log /var/log/nginx/branch-error.log notice;
+index index.html;
+root /home/deploy/app/$branch/current/public;
+rewrite_log on;
+
+location /api/ {
+set $pass_socket http://unix:/home/deploy/app/$branch/current/tmp/pids/server.sock;
+
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_set_header X-Real-IP $remote_addr;
+    proxy_set_header Host $http_host;
+
+    proxy_http_version 1.1;
+    proxy_set_header Upgrade $http_upgrade;
+    proxy_set_header Connection "upgrade";
+
+    proxy_pass $pass_socket;
+    proxy_redirect off;
+    proxy_read_timeout 240s;
+}
+}
+#+end_src
+
+* [[#создание-github-workflow-для-создания-review-app][Создание Job для развертывания Review App]]
+  Развертывание главной ветки у нас есть, но нам еще нужно сделать развертывание review app.
+  Давайте сделаем это путем копирование текущей job для развертывания production ветки.
+  #+begin_src yaml
+  create_review_app:
+  extends:
+    - .setup_ssh
+      stage: review
+      variables:
+      REPOSITORY_URL: 'git@gitlab.com:ci-cd-workshop1/backend.git'
+      DEPLOY_DST: '/home/deploy/app/$CI_COMMIT_REF_SLUG'
+      DEPLOY_BRANCH: $CI_COMMIT_REF_NAME
+      DB_NAME: $CI_COMMIT_REF_SLUG
+      script:
+    - npm i -g pm2
+    - ssh -q $SSH_USER@$SSH_HOST [[ ! -d "$DEPLOY_DST" ]] && pm2 deploy ecosystem.config.js production setup
+    - |
+      ssh -q $SSH_USER@$SSH_HOST <<EOF
+      echo "DB_NAME=$DB_NAME" > $DEPLOY_DST/.env
+      echo "DB_USER=$DB_USER" >> $DEPLOY_DST/.env
+      echo "DB_PASSWORD=$DB_PASSWORD" >> $DEPLOY_DST/.env
+      echo "SECRET=$SECRET" >> $DEPLOY_DST/.env
+      EOF
+    - pm2 deploy ecosystem.config.js production --update-env
+    - ssh -q $SSH_USER@$SSH_HOST "$DEPLOY_DST/current/bin/create-db-copy $DB_PASSWORD $DB_NAME"
+    - ssh -q $SSH_USER@$SSH_HOST "cd $DEPLOY_DST/current && env DB_NAME=$DB_NAME pm2 start ecosystem.config.js --env production --update-env"
+      environment:
+      name: review/$CI_COMMIT_REF_NAME
+      url: http://$CI_COMMIT_REF_SLUG.$APP_HOST/
+      on_stop: stop_review
+      rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+      #+end_src
+      Изменения незначительные, давайте пройдемся по каждому из них.
+      Для корректного функционирования review app нам нужны данные. Для этого мы просто воспользуемся скриптом из предыдущих семинаров, который
+      создает копию базы данных с заданным именем.
+      #+begin_src yaml
+      ssh -q $SSH_USER@$SSH_HOST "$DEPLOY_DST/current/bin/create-db-copy $DB_PASSWORD $DB_NAME"
+      #+end_src
+      Для того, чтобы review app создавался у нас только на merge request, нам надо добавить правило для этого. Правило, которое укажет, что запускать
+      job только тогда, когда pipeline был вызван merge request.
+      #+begin_src yaml
+      rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+      #+end_src
+      Если мы будем создавать review app на каждый merge request, то рано или поздно у нас просто закончатся ресурсы на сервере, но мы же хорошие программисты, которые следуют традиции из языка C:
+      #+begin_quote
+      Выделил память? Не забудь ее освободить!
+      #+end_quote
+      Для этого нам нужно указать, что окружение можно освобождать:
+      #+begin_src yaml
+      environment:
+      name: review/$CI_COMMIT_REF_NAME
+      url: http://$CI_COMMIT_REF_SLUG.$APP_HOST/
+      on_stop: stop_review # название job для запуска при остановке
+      #+end_src
+      Давайте и создадим ее сразу, чтобы у нас не было ошибки потом.
+      #+begin_src yaml
+      stop_review:
+      stage: review
+      extends:
+    - .setup_ssh
+      environment:
+      name: review/$CI_COMMIT_REF_NAME
+      action: stop
+      variables:
+      DEPLOY_DST: '/home/deploy/app/$CI_COMMIT_REF_SLUG'
+      script:
+    - |
+      ssh $SSH_USER@$SSH_HOST <<EOF
+      cd $DEPLOY_DST/current
+      pm2 delete ecosystem.config.js
+      EOF
+      rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+      when: manual
+      #+end_src
+      Указываем, что эта job нужна для остановки review app. Самое важное это указать нужное имя приложения для остановки.
+      #+begin_src yaml
+      environment:
+      name: review/$CI_COMMIT_REF_NAME
+      action: stop
+      #+end_src
+      Сам скрипт для остановки делает простую вещь, заходит на сервер по =SSH= и при помощи =pm2= удаляет (не физически) приложение.
+      #+begin_src yaml
+      script:
+    - |
+      ssh $SSH_USER@$SSH_HOST <<EOF
+      cd $DEPLOY_DST/current
+      pm2 delete ecosystem.config.js
+      EOF
+      #+end_src
+      Можно еще удалять и директорию сразу, но это можно опустить в текущем примере.
+* [[#добавление-сообщения-об-успешном-создании-review-app][Добавление информации об успешном создании Review App]]
+  В отличие от GitHub, у GitLab окружения являются встроенным функционалом, и когда на merge request было или будет создано
+  окружение, то виджет merge request отобразит эту информацию и поэтому тут нам ничего делать не надо.
+* [[#пропуск-создания-review-app-при-заданных-условиях][Пропуск создания Review App при заданных условиях]]
+  Как и в семинаре GitHub давайте добавим аналогичное условие, если заголовк merge request содержит фразу =SKIP REVIEW=, то создавать review app не требуется. Для этого нам нужно добавить это в правила:
+  #+begin_src yaml
+  rules:
+    - if: '$CI_MERGE_REQUEST_TITLE =~ /SKIP REVIEW/'
+      when: never
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+      when: manual
+      #+end_src
+      *При работе с правилами в GitLab надо понимать одну главную вещь, что они работают в заданном порядке, и как только результатом правила будет истина, то все остальные правила проверены не будут и job будет добавлена в pipeline.*
+      Об этом и других аспектах можно почитать [[https://docs.gitlab.com/ee/ci/yaml/README.html#rules-clauses][тут]].
+* [[#frontend--backend--][Frontend + Backend = ❤]]
+  Переключимся на Frontend и доведем файл =.gitlab-ci.yml= до нужного соответствия с backend.
+  #+begin_src yaml
+---
+stages:
+- test
+- build
+- deploy
+
+default:
+image: node:14.17.0-alpine
+cache:
+key:
+files:
+- package-lock.json
+paths:
+- .npm/
+before_script:
+- npm ci --cache .npm --prefer-offline
+
+.setup_ssh:
+before_script:
+- 'which ssh-agent || (apk add --update openssh curl bash git)'
+- eval $(ssh-agent -s)
+- echo "$SSH_PRIVATE_KEY" | tr -d '\r' | ssh-add -
+- mkdir -p ~/.ssh
+- chmod 700 ~/.ssh
+- echo "$SSH_KNOWN_HOSTS" > ~/.ssh/known_hosts
+
+lint:
+stage: test
+script:
+- npm run lint
+- npm run check:format
+
+build:
+stage: build
+variables:
+REACT_APP_BACKEND_URL: http://$CI_COMMIT_REF_SLUG.$APP_HOST/api
+script:
+- npm run build
+artifacts:
+paths:
+- build
+expire_in: 1 week
+
+deploy:
+extends:
+- .setup_ssh
+stage: deploy
+variables:
+DEPLOY_DST: '/home/deploy/app/$CI_COMMIT_REF_SLUG/current/public/'
+script:
+- ssh $SSH_USER@$SSH_HOST "mkdir -p $DEPLOY_DST"
+- scp -r build/* $SSH_USER@$SSH_HOST:$DEPLOY_DST
+#+end_src
+Отличие в том, что frontend будет разворачиваться всегда в заданную веткой директорию.
+* [[#используем-github-api-для-вызова-workflow][Используем GitLab API для запуска pipeline]]
+  Но есть проблема, чтобы проверить backend можно вызывать API, а вот для frontend уже дело сложнее. Поэтому давайте
+  сделает аналогично GitHub и добавим развертывание обоих приложений в review app. Для простоты пойдем аналогичным путем и будем вызывать API. Хотя в GitLab есть встроенный механизм для этого, но его мы затронем в следующих семинарах.
+  ** Backend
+  Для начала давайте добавим переменные окружения с нужными ссылками API.
+  #+begin_src yaml
+  BRANCH_EXISTS_URL: 'https://gitlab.com/api/v4/projects/$FRONTEND_PROJECT_ID/repository/branches/$CI_COMMIT_REF_NAME'
+  CREATE_BRANCH_URL: 'https://gitlab.com/api/v4/projects/$FRONTEND_PROJECT_ID/repository/branches?branch=$CI_COMMIT_REF_NAME&ref=$CI_DEFAULT_BRANCH'
+  TRIGGER_PIPELINE_URL: 'https://gitlab.com/api/v4/projects/$FRONTEND_PROJECT_ID/pipeline?ref=$CI_COMMIT_REF_NAME'
+  #+end_src
+- =BRANCH_EXISTS_URL= для проверки наличия ветки в репозитории.
+- =CREATE_BRANCH_URL= для создания ветки
+- =TRIGGER_PIPELINE_URL= для вызова pipeline
+  И теперь в секции =script= добавим логику для вызова этих API.
+  #+begin_src yaml
+  script:
+    - 'status_code=$(curl -I --header "PRIVATE-TOKEN: $PAT_TOKEN" --write-out "%{http_code}" --silent --output /dev/null "$BRANCH_EXISTS_URL")'
+        - '[[ "$status_code" -ne 204 ]] && status_code=$(curl -X POST --header "PRIVATE-TOKEN: $PAT_TOKEN" --write-out "%{http_code}" --silent --output /dev/null "$CREATE_BRANCH_URL")'
+    - '[[ "$status_code" -ne 400 ]] && echo "Branch already exists"'
+    - 'curl -X POST --header "PRIVATE-TOKEN: $PAT_TOKEN" --write-out "%{http_code}" --silent --output /dev/null "$TRIGGER_PIPELINE_URL"'
+      #+end_src
+      ** Frontend
+      И теперь добавим логику в frontend.
+      Сначала определим job для запуска review app:
+      #+begin_src yaml
+      start_review:
+      stage: review
+      extends:
+        - .setup_ssh
+          variables:
+          BRANCH_EXISTS_URL: 'https://gitlab.com/api/v4/projects/$BACKEND_PROJECT_ID/repository/branches/$CI_COMMIT_REF_NAME'
+          CREATE_BRANCH_URL: 'https://gitlab.com/api/v4/projects/$BACKEND_PROJECT_ID/repository/branches?branch=$CI_COMMIT_REF_NAME&ref=$CI_DEFAULT_BRANCH'
+          TRIGGER_PIPELINE_URL: 'https://gitlab.com/api/v4/projects/$BACKEND_PROJECT_ID/pipeline?ref=$CI_COMMIT_REF_NAME'
+          script:
+        - 'status_code=$(curl -I --header "PRIVATE-TOKEN: $PAT_TOKEN" --write-out "%{http_code}" --silent --output /dev/null "$BRANCH_EXISTS_URL")'
+        - '[[ "$status_code" -ne 204 ]] && status_code=$(curl -X POST --header "PRIVATE-TOKEN: $PAT_TOKEN" --write-out "%{http_code}" --silent --output /dev/null "$CREATE_BRANCH_URL")'
+        - '[[ "$status_code" -ne 400 ]] && echo "Branch already exists" && exit 0'
+        - 'curl -X POST --header "PRIVATE-TOKEN: $PAT_TOKEN" --write-out "%{http_code}" --silent --output /dev/null "$TRIGGER_PIPELINE_URL"'
+          environment:
+          name: review/$CI_COMMIT_REF_NAME
+          url: http://$CI_COMMIT_REF_SLUG.$APP_HOST/
+          on_stop: stop_review
+          rules:
+        - if: '$CI_MERGE_REQUEST_TITLE =~ /SKIP REVIEW/'
+          when: never
+        - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+          #+end_src
+          И для остановки.
+          #+begin_src yaml
+          stop_review:
+          stage: review
+          extends:
+        - .setup_ssh
+          environment:
+          name: review/$CI_COMMIT_REF_NAME
+          action: stop
+          variables:
+          DEPLOY_DST: '/home/deploy/app/$CI_COMMIT_REF_SLUG/public/current'
+          script:
+        - |
+          ssh $SSH_USER@$SSH_HOST "rm -rf $DEPLOY_DST"
+          rules:
+        - if: '$CI_MERGE_REQUEST_TITLE =~ /SKIP REVIEW/'
+          when: never
+        - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+          when: manual
+          #+end_src
+* [[#сброс-базы-данных-до-начального-состояния][Сброс базы данных до начального состояния]]
+  И по аналогии с GitHub и job для остановки review app можно написать job для сброса базы данных.
+  #+begin_src yaml
+  reset_db:
+  stage: review
+  extends:
+    - .setup_ssh
+      variables:
+      DEPLOY_DST: '/home/deploy/app/$CI_COMMIT_REF_SLUG'
+      DB_NAME: $CI_COMMIT_REF_SLUG
+      script:
+    - |
+      ssh $SSH_USER@$SSH_HOST <<EOF
+      ./$DEPLOY_DST/current/bin/create-db-copy "$DB_PASSWORD" "$DB_NAME"
+      EOF
+      rules:
+    - if: '$CI_MERGE_REQUEST_TITLE =~ /SKIP REVIEW/'
+      when: never
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+      when: manual
+      #+end_src
+* Ссылки
++ [[https://docs.gitlab.com/ee/ci/yaml/][Подробное описание ключевых слов файла gitlab-ci.yml]]
++ [[https://docs.gitlab.com/ee/ci/variables/predefined_variables.html][Предустановленные переменные для использования]]

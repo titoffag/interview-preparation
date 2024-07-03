@@ -1,0 +1,520 @@
+#+title: CI/CD Workshop #2 GitHub
+#+roam_tags: gitlab ci-cd-workshop
+#+PROPERTY: header-args :results silent :noweb yes :exports code
+#+LAST_MODIFIED: <2021-06-15 Tue>
+
+* Contents :TOC:
+- [[#review-app][Review App]]
+    - [[#что-такое-review-application][Что такое Review Application?]]
+    - [[#подготовка-сервера][Подготовка сервера]]
+- [[#настройка-nginx-для-функционала-review-apps][Настройка NGINX для функционала Review Apps]]
+- [[#модернизация-развертывания-для-поддержки-review-apps][Модернизация развертывания для поддержки Review Apps]]
+- [[#создание-github-workflow-для-создания-review-app][Создание GitHub Workflow для создания Review App]]
+- [[#добавление-сообщения-об-успешном-создании-review-app][Добавление сообщения об успешном создании Review App]]
+- [[#создание-github-workflow-для-удаления-review-app][Создание GitHub Workflow для удаления Review App]]
+- [[#пропуск-создания-review-app-при-заданных-условиях][Пропуск создания Review App при заданных условиях]]
+- [[#создание-копии-базы-данных-для-review-app][Создание копии базы данных для Review App]]
+- [[#frontend--backend--][Frontend + Backend = ❤]]
+- [[#используем-github-api-для-вызова-workflow][Используем GitHub API для вызова workflow]]
+- [[#сброс-базы-данных-до-начального-состояния][Сброс базы данных до начального состояния]]
+- [[#ссылки][Ссылки]]
+
+* Review App
+  ** Что такое Review Application?
+  Review App это способ развертывания ветки для просмотра приложения с изменениями этой ветки с возможностью обновления. Иными словами, задача проста: получить работающее изолированное приложение, чтобы другие члены команды могли попробовать его в бою.
+  Например, инженер работает в своей ветке и в момент времени он готов пройти code review. Обычной практикой является маленькая инструкция в Pull Request о том, как локально проверить (посмотреть) изменения. Это работает для инженеров, но может вызвать трудности у других членов вашей команды: дизайнеры, QA инженеры, менеджеры. Время будет потеряно, пока член команды разбирается с просмотром изменений локально. И таких нюансов много, и поэтому удобнее, легче и быстрее развернуть Review App и дать готовую ссылку.
+  ** Подготовка сервера
+  У нас уже есть сервер, на который мы выкладываем наше приложение, но для поддержки Review App нам надо модифицировать его, чтобы было удобнее и понятнее. Сейчас наша структура проста:
+  #+begin_src shell
+  .
+  └── realworld
+
+1 directory, 0 files
+#+end_src
+У нас просто есть одна директория для нашего приложения, которое работает из ветки =main=. У нас же будет таких директорий множество, поэтому давайте создадим новую корневую директорию в домашней директории пользователя =deploy= и назовем ее =app=:
+#+begin_src shell
+.
+└── app
+└── realworld
+
+2 directories, 0 files
+#+end_src
+
+Каждое новое Review App будет разворачиваться в =~/app/BRANCH_NAME=, где =BRANCH_NAME= название ветки в нашем репозитории.
+
+* Настройка NGINX для функционала Review Apps
+  Теперь настроим NGINX для работы с Review Apps. Суть заключается в том, чтобы научить nginx по запрашиваемому поддомену использовать приложение из соответствующей директории.
+
+Для начала пойдем простым путем и сделаем простое регулярное выражение для сохранения нашего поддомена, оно же название нашей ветки.
+#+begin_src conf
+server {
+server_name ~(?<branch>[^\.]*)\.172-104-151-230\.nip\.io$;
+}
+#+end_src
+
+Теперь у нас есть переменная =$branch= с названием нашей ветки. Не забудем ее подставить в корневой путь до приложения.
+#+begin_src conf
+server {
+server_name ~(?<branch>[^\.]*)\.172-104-151-230\.nip\.io$;
+root /home/deploy/app/$branch/current/public;
+}
+#+end_src
+
+У нас есть имя нашей ветки, а значит мы можем использовать верное API приложение для запрошенной Review App.
+Для удобства сформируем путь до сокета нашего приложения с учетом запрошенного имени приложения.
+#+begin_src conf
+server {
+server_name ~(?<branch>[^\.]*)\.172-104-151-230\.nip\.io$;
+root /home/deploy/app/$branch/current/public;
+
+location /api/ {
+set $pass_socket http://unix:/home/deploy/app/$branch/current/tmp/pids/server.sock;
+}
+}
+#+end_src
+
+Добавим заголовки для корректного проброса запроса.
+#+begin_src conf
+server {
+server_name ~(?<branch>[^\.]*)\.172-104-151-230\.nip\.io$;
+root /home/deploy/app/$branch/current/public;
+
+location /api/ {
+set $pass_socket http://unix:/home/deploy/app/$branch/current/tmp/pids/server.sock;
+
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_set_header X-Real-IP $remote_addr;
+    proxy_set_header Host $http_host;
+
+    proxy_http_version 1.1;
+    proxy_set_header Upgrade $http_upgrade;
+    proxy_set_header Connection "upgrade";
+}
+}
+#+end_src
+
+И финальный вариант конфигурации.
+#+begin_src nginx
+server {
+listen 80 default_server;
+
+server_name ~(?<branch>[^\.]*)\.172-104-151-230\.nip\.io$;
+access_log /var/log/nginx/branch-access.log;
+error_log /var/log/nginx/branch-error.log notice;
+index index.html;
+root /home/deploy/app/$branch/current/public;
+rewrite_log on;
+
+location /api/ {
+set $pass_socket http://unix:/home/deploy/app/$branch/current/tmp/pids/server.sock;
+
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_set_header X-Real-IP $remote_addr;
+    proxy_set_header Host $http_host;
+
+    proxy_http_version 1.1;
+    proxy_set_header Upgrade $http_upgrade;
+    proxy_set_header Connection "upgrade";
+
+    proxy_pass $pass_socket;
+    proxy_redirect off;
+    proxy_read_timeout 240s;
+}
+}
+#+end_src
+
+* Модернизация развертывания для поддержки Review Apps
+* Создание GitHub Workflow для создания Review App
+  Давайте начнем с Frontend приложения. Создадим новый Workflow для [[https://github.com/vitallium/react-redux-realworld-example-app/blob/main/.github/workflows/create-review-app.yml][создания Review App]].
+  #+begin_src yaml
+---
+name: Create review app
+
+on:
+pull_request:
+
+jobs:
+build:
+runs-on: ubuntu-latest
+steps:
+- uses: actions/checkout@v2
+- uses: actions/setup-node@v2
+with:
+node-version: '14'
+- run: npm install
+- name: Build
+run: npm run build
+env:
+REACT_APP_BACKEND_URL: http://${{ github.head_ref }}.${{ secrets.API_URL }}
+- name: Archive build
+uses: actions/upload-artifact@v2
+with:
+name: build
+path: build
+deploy:
+needs: build
+runs-on: ubuntu-latest
+steps:
+- name: Download a single artifact
+uses: actions/download-artifact@v2
+with:
+name: build
+path: build
+- name: Setup SSH key
+uses: shimataro/ssh-key-action@v2
+with:
+key: ${{ secrets.SSH_PRIVATE_KEY }}
+known_hosts: ${{ secrets.SSH_KNOWN_HOSTS }}
+- name: Adding known hosts
+run: ssh-keyscan -H ${{ secrets.SSH_HOST }} >> ~/.ssh/known_hosts
+- name: Copy build to the server
+run: |
+ssh $SSH_USER@$SSH_HOST "mkdir -p ~/app/${{ github.head_ref }}/public"
+rsync -ravz build/* $SSH_USER@$SSH_HOST:~/app/${{ github.head_ref }}/public/
+env:
+SSH_HOST: ${{ secrets.SSH_HOST }}
+SSH_USER: ${{ secrets.SSH_USER }}
+#+end_src
+Суть работы этого workflow в том, что мы используем встроенный объект Github Workflow - [[https://docs.github.com/en/actions/reference/context-and-expression-syntax-for-github-actions#github-context][=github]]=. Он содержит информацию о контексте, в котором выполняется workflow и событии, которое его вызвало. И =github.head_ref= содержит название нашей ветки для события создания pull request. Если мы ведем работу в ветке с именем =testing=, делаем pull request из нее, то =github.head_ref= будет содержать =testing=. И наше Review App будет развернуто в директорию =/home/deploy/app/testing=. По сравнению с обычным workflow разворачивания приложения из ветки =main= мы поменяли только две вещи:
+- путь, куда мы копируем build нашего приложения =~/app/testing/public/=.
+- и переменную =REACT_APP_BACKEND_URL= мы тоже поменяли. Теперь она содержит динамический префикс нашей API точки =http://testing.172-104-151-230.nip.io/api.=
+* Добавление сообщения об успешном создании Review App
+  Для удобства давайте добавим создания сообщения с ссылкой на наше Review App при помощи бота. Добавим это действие на успешное выполнение шага копирования приложения на сервер:
+  #+begin_src yaml
+  - name: Post review app URL
+  if: success()
+  uses: mshick/add-pr-comment@v1
+  with:
+  message: Created new review app at ${{ env.REVIEW_APP_URL }}
+  repo-token: ${{ secrets.GITHUB_TOKEN }}
+  env:
+  REVIEW_APP_URL: http://${{ github.head_ref }}.${{ secrets.APP_HOST }}/
+  #+end_src
+  Ключ [[https://docs.github.com/en/actions/reference/workflow-syntax-for-github-actions#jobsjob_idif][if]] определяет условие, при котором шаг будет выполнен, мы используем встроенную функцию [[https://docs.github.com/en/actions/reference/context-and-expression-syntax-for-github-actions#success][success()]], которая проверяет успешность предыдущего шага. А в самом действии мы просто создаем сообщение в pull request с ссылкой на наш Review App. Пример такого сообщения можно посмотреть [[https://github.com/vitallium/react-redux-realworld-example-app/pull/2#issuecomment-846530415][тут]].
+* Создание GitHub Workflow для удаления Review App
+  Создание Review App у нас уже есть. Логичным шагом будет создания обратного действия на удаление Review App в случае закрытия Pull Request.
+  #+begin_src yaml
+---
+name: Delete review app
+
+on:
+pull_request:
+types: [closed]
+
+jobs:
+delete:
+runs-on: ubuntu-latest
+steps:
+- name: Setup SSH key
+uses: shimataro/ssh-key-action@v2
+with:
+key: ${{ secrets.SSH_PRIVATE_KEY }}
+known_hosts: ${{ secrets.SSH_KNOWN_HOSTS }}
+- name: Adding known hosts
+run: ssh-keyscan -H ${{ secrets.SSH_HOST }} >> ~/.ssh/known_hosts
+- name: Deleting review app
+run: |
+ssh $SSH_USER@$SSH_HOST "rm -rf ~/app/${{ github.head_ref }}/public"
+env:
+SSH_HOST: ${{ secrets.SSH_HOST }}
+SSH_USER: ${{ secrets.SSH_USER }}
+#+end_src
+Тут стоит обратить внимание на событие, при котором вызывается workflow:
+#+begin_src yaml
+on:
+pull_request:
+types: [closed]
+#+end_src
+Такая запись означает, что workflow будет выполнен на закрытие Pull Request. Закрытием Pull Request считаются два известных события: слияние и просто закрытие. Если же нам все-таки нужно проверить был ли слит pull request, то мы можем воспользоваться вот таким условием в нужном нам месте:
+#+begin_src yaml
+if: github.event.pull_request.merged == true
+#+end_src
+* Пропуск создания Review App при заданных условиях
+  Частым сценарием является пропуск создания Review App в случаях, когда в нем нет никакой необходимости. Давайте добавим простую проверку, если в заголовке pull request есть фраза =SKIP REVIEW=, то создание Review App пропускается. Для этого, в job =deploy= добавим условие:
+  #+begin_src yaml
+  if: "!contains(github.event.pull_request.title, 'SKIP REVIEW')"
+  #+end_src
+  Если заголовок pull request *не* содержим =SKIP REVIEW=, то Review App создается. Тогда наш workflow =create-review-app.yml= будет выглядеть вот так:
+  #+begin_src yaml
+---
+name: Create review app
+
+on:
+pull_request:
+
+jobs:
+build:
+runs-on: ubuntu-latest
+steps:
+- uses: actions/checkout@v2
+- uses: actions/setup-node@v2
+with:
+node-version: '14'
+- run: npm install
+- name: Build
+run: npm run build
+env:
+REACT_APP_BACKEND_URL: http://${{ github.head_ref }}.${{ secrets.API_URL }}
+- name: Archive build
+uses: actions/upload-artifact@v2
+with:
+name: build
+path: build
+deploy:
+if: "!contains(github.event.pull_request.title, 'SKIP REVIEW')"
+needs: build
+runs-on: ubuntu-latest
+steps:
+- name: Download a single artifact
+uses: actions/download-artifact@v2
+with:
+name: build
+path: build
+- name: Setup SSH key
+uses: shimataro/ssh-key-action@v2
+with:
+key: ${{ secrets.SSH_PRIVATE_KEY }}
+known_hosts: ${{ secrets.SSH_KNOWN_HOSTS }}
+- name: Adding known hosts
+run: ssh-keyscan -H ${{ secrets.SSH_HOST }} >> ~/.ssh/known_hosts
+- name: Copy build to the server
+run: |
+ssh $SSH_USER@$SSH_HOST "mkdir -p ~/app/${{ github.head_ref }}/public"
+rsync -ravz build/* $SSH_USER@$SSH_HOST:~/app/${{ github.head_ref }}/public/
+env:
+SSH_HOST: ${{ secrets.SSH_HOST }}
+SSH_USER: ${{ secrets.SSH_USER }}
+- name: Post review app URL
+if: success()
+uses: mshick/add-pr-comment@v1
+with:
+message: Created new review app at ${{ env.REVIEW_APP_URL }}
+repo-token: ${{ secrets.GITHUB_TOKEN }}
+env:
+REVIEW_APP_URL: http://${{ github.head_ref }}.${{ secrets.APP_HOST }}/
+#+end_src
+* Создание копии базы данных для Review App
+  Review App для Backend, в нашем случае, будет сложнее, так как есть зависимость от базы данных PostgreSQL. Мы не можем использовать единую базу данных, так как любые деструктивные действия в любом Review App будет отображены не только в других Review App. Для изоляции Review App нам потребуется создать копию базы данных специально под Review App. Писать все части этого сразу в YAML файле workflow будет неудобно, давайте для создании копии базы данных напишем простой скрипт, который будет принимать на вход два аргумента пароль базы данных и название новой базы данных для создания. Этот скрипт сохраним в репозитории backend под следующим именем =./bin/create-db-copy=:
+  #+begin_src sh
+  #!/usr/bin/env bash
+  set -euo pipefail
+
+export PGPASSWORD="$1"
+
+psql -U deploy -d postgres -c "DROP DATABASE IF EXISTS \"$2\";"
+psql -U deploy -d postgres -c "CREATE DATABASE \"$2\";"
+pg_dump -U deploy -d realworld | psql "$2"
+psql -U deploy -d postgres -c "GRANT ALL PRIVILEGES ON DATABASE \"$2\" to realworld;";
+#+end_src
+*Такой способ создания копии базы данных приведен исключительно в качестве примера и не должен быть использован в реальной жизни*
+
+Не забываем сделать его исполняемым при помощи =chmod +x ./bin/create-db-copy=.
+* Frontend + Backend = ❤
+  Создание Review App для Frontend это хорошо, но наш Frontend не может функционировать без Backend копии приложения. Давайте создадим аналогичный workflow для backend части приложения:
+  #+begin_src yaml
+
+name: Create review app
+
+on:
+pull_request:
+branches: [main]
+workflow_dispatch:
+
+jobs:
+deploy:
+runs-on: ubuntu-latest
+steps:
+- uses: actions/checkout@v2
+- name: Install SSH Key
+uses: shimataro/ssh-key-action@v2
+with:
+key: ${{ secrets.SSH_PRIVATE_KEY }}
+known_hosts: ${{ secrets.SSH_KNOWN_HOSTS }}
+- name: Adding Known Hosts
+run: ssh-keyscan -H ${{ secrets.SSH_HOST }} >> ~/.ssh/known_hosts
+- name: Copy files to the server
+run: |
+rsync -a -r --progress --human-readable --delete \
+--exclude-from '.gitignore' \
+--include-from .deploylist \
+--exclude public \
+--exclude ecosystem.config.js \
+. deploy@172.104.151.230:~/app/${{ github.head_ref }}/
+- name: Restarting the app
+run: |
+ssh $SSH_USER@$SSH_HOST "cp ~/ecosystem.config.js ~/app/${{ github.head_ref }}/ && pushd ~/app/${{ github.head_ref }} && sed -i 's/realworld-db/${{ github.head_ref }}/' ecosystem.config.js && ./bin/create-db-copy ${{ secrets.DB_PASSWORD }} ${{ github.head_ref }} && npm install && pm2 restart ecosystem.config.js --name ${{ github.head_ref }} --env production --update-env && popd"
+env:
+SSH_USER: ${{ secrets.SSH_USER }}
+SSH_HOST: ${{ secrets.SSH_HOST }}
+- name: Post review app URL
+if: success()
+uses: mshick/add-pr-comment@v1
+with:
+message: Created new review app at ${{ env.REVIEW_APP_URL }}
+repo-token: ${{ secrets.GITHUB_TOKEN }}
+env:
+REVIEW_APP_URL: http://${{ github.head_ref }}.${{ secrets.APP_HOST }}/
+#+end_src
+Ничего нового, кроме специального шага для перезапуска приложения, которое делает следующее:
+#+begin_src sh
+cp ~/ecosystem.config.js ~/app/${{ github.head_ref }}/ && # копирует шаблонный файл конфигурации pm2
+pushd ~/app/${{ github.head_ref }} && # переходим в директорию review app и кладем ее на стек
+sed -i 's/realworld-db/${{ github.head_ref }}/' ecosystem.config.js && # заменяем в файле конфига имя базы данных на имя ветки Review App
+./bin/create-db-copy ${{ secrets.DB_PASSWORD }} ${{ github.head_ref }} && # создаем копию базы данным с именем ветки
+npm install && # устанавливаем зависимости
+pm2 restart ecosystem.config.js --name ${{ github.head_ref }} --env production --update-env && # перезапускаем pm2
+popd # снимаем со стека директорию и выходим из нее
+#+end_src
+* Используем GitHub API для вызова workflow
+  Когда мы развернули Review App для ветки backend или frontend, у нас все еще есть нерешенная проблема отсутствующего компонента - backend или frontend. Было бы удобно, если мы разворачиваем ветку для Review App из ветки =testing= репозитория backend, наш CI проверял бы наличие ветки с таким же именем в репозитории frontend и, при наличии таковой, вызывал бы workflow разворачивания Review App frontend части приложения, а при отсутствии ветки была бы использована ветка =master=. Для этого мы можем использовать два метода из GitHub API: проверку =ref= (ветки) и вызов workflow. Давайте добавим в =create-review-app.yml= нашу логику:
+  #+begin_src yaml
+  review:
+  needs: deploy
+  runs-on: ubuntu-latest
+  steps:
+  # проверяем наличие ветки
+  - id: check-branch
+  uses: octokit/request-action@v2.x
+  with:
+  route: GET /repos/{owner}/{repo}/git/ref/:ref
+  owner: vitallium
+  # в нашем frontend репозитории
+  repo: react-redux-realworld-example-app
+  # имя ветки
+  ref: ${{ github.head_ref }}
+  env:
+  GITHUB_TOKEN: ${{ secrets.PAT_TOKEN }}
+  # важный момент, чтобы workflow продолжил работу
+  # в случае возврата ошибки про отсутствующую ветку
+  continue-on-error: true
+  # условный шаг, если вызов API вернул код 200, т.е. ветка существует
+  - if: steps.check-branch.output.status == 200
+  name: Trigger frontend review app
+  uses: octokit/request-action@v2.x
+  with:
+  # вызываем workflow при помощи API
+  route: POST
+  /repos/{owner}/{repo}/actions/workflows/publish-review-app.yml/dispatches
+  owner: vitallium
+  # наш frontend репозиторий
+  repo: react-redux-realworld-example-app
+  # имя ветки, на которой запустить
+  ref: ${{ github.head_ref }}
+  # аргументы workflow
+  inputs: |
+  # имя ветки, из которой собрать приложение
+  refName: ${{ github.head_ref }}
+  # название директории, куда залить приложение
+  dst: ${{ github.head_ref }}
+  env:
+  GITHUB_TOKEN: ${{ secrets.PAT_TOKEN }}
+  # почти аналогичный шаг, если соответствующей ветки нет
+  # мы заливаем master ветку
+  - if: steps.check-branch.output.status != 200
+  name: Trigger frontend review app
+  uses: octokit/request-action@v2.x
+  with:
+  route: POST /repos/{owner}/{repo}/actions/workflows/publish-review-app.yml/dispatches
+  owner: vitallium
+  repo: react-redux-realworld-example-app
+  ref: main
+  inputs: |
+  # используем ветку master
+  refName: "main"
+  # но заливаем в директорию с именем review app
+  dst: ${{ github.head_ref }}
+  env:
+  GITHUB_TOKEN: ${{ secrets.PAT_TOKEN }}
+  #+end_src
+  Почти готово, но у нас нет указанного workflow =publis-review-app.yml=. Давайте его создадим в репозитории frontend:
+  #+begin_src yaml
+  --
+  name: Publish review app
+
+on:
+workflow_dispatch:
+inputs:
+refName:
+description: "Ref name"
+required: true
+dst:
+description: "Where to deploy"
+required: true
+
+jobs:
+build:
+runs-on: ubuntu-latest
+steps:
+- uses: actions/checkout@v2
+with:
+ref: ${{ github.event.inputs.refName }}
+- uses: actions/setup-node@v2
+with:
+node-version: '14'
+- run: npm install
+- name: Build
+run: npm run build
+env:
+REACT_APP_BACKEND_URL: http://${{ github.event.inputs.dst }}.${{ secrets.API_URL }}
+- name: Archive build
+uses: actions/upload-artifact@v2
+with:
+name: build
+path: build
+deploy:
+needs: build
+runs-on: ubuntu-latest
+steps:
+- name: Download a single artifact
+uses: actions/download-artifact@v2
+with:
+name: build
+path: build
+- name: Setup SSH key
+uses: shimataro/ssh-key-action@v2
+with:
+key: ${{ secrets.SSH_PRIVATE_KEY }}
+known_hosts: ${{ secrets.SSH_KNOWN_HOSTS }}
+- name: Adding known hosts
+run: ssh-keyscan -H ${{ secrets.SSH_HOST }} >> ~/.ssh/known_hosts
+- name: Copy build to the server
+run: |
+ssh $SSH_USER@$SSH_HOST "mkdir -p ~/app/${{ github.event.inputs.dst }}/public"
+rsync -ravz build/* $SSH_USER@$SSH_HOST:~/app/${{ github.event.inputs.dst }}/public/
+env:
+SSH_HOST: ${{ secrets.SSH_HOST }}
+SSH_USER: ${{ secrets.SSH_USER }}
+#+end_src
+Workflow аналогичен =deploy.yml= за исключением того, что мы используем аргументы workflow в качестве параметров.
+* Сброс базы данных до начального состояния
+  Когда были проделаны некоторые манипуляции с Review App, было бы неплохо иметь возможность сбросить состояние нашего хранилища данных (базы данных) до исходного. У GitHub есть концепция Workflow, которые можно [[https://docs.github.com/en/actions/reference/events-that-trigger-workflows#manual-events][вызывать вручную]]. Давайте добавим такой workflow, при помощи которого мы сможем сбрасывать базу данных до исходного состояния. Создадим ее под именем =.github/workflows/reset-db.yml=:
+  #+begin_src yaml
+  name: Reset database
+
+on:
+workflow_dispatch:
+
+jobs:
+deploy:
+runs-on: ubuntu-latest
+steps:
+- name: Install SSH Key
+uses: shimataro/ssh-key-action@v2
+with:
+key: ${{ secrets.SSH_PRIVATE_KEY }}
+known_hosts: ${{ secrets.SSH_KNOWN_HOSTS }}
+- name: Adding Known Hosts
+run: ssh-keyscan -H ${{ secrets.SSH_HOST }} >> ~/.ssh/known_hosts
+- name: Resetting the database
+run: |
+ssh $SSH_USER@$SSH_HOST "pushd ~/app/${{ github.head_ref }} && pm2 stop ecosystem.config.js && ./bin/create-db-copy ${{ secrets.DB_PASSWORD }} ${{ github.head_ref }} && pm2 restart ecosystem.config.js --name ${{ github.head_ref }} --env production --update-env && popd"
+env:
+SSH_USER: ${{ secrets.SSH_USER }}
+SSH_HOST: ${{ secrets.SSH_HOST }}
+#+end_src
+Мы переиспользуем часть команд создания нашего Review App для сброса базы данных.
+* Ссылки
+- [[https://docs.github.com/en/actions][GitHub Actions]]
+- [[https://docs.github.com/en/actions/reference][GitHub Actions Reference]]
+- [[https://docs.github.com/en/actions/reference/context-and-expression-syntax-for-github-actions][GitHub Expression Syntax]]
+- [[https://docs.github.com/en/actions/reference/environment-variables][Переменные окружение в GitHub Actions]]
