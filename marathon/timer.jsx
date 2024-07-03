@@ -1,7 +1,7 @@
 import { useLayoutEffect, useRef, useState } from "react";
 
 export default function Timer() {
-  let timer = useRef();
+  const timer = useRef(0);
   const [ count, setCount ] = useState(0);
   const [ shouldWork, setShouldWork ] = useState(false);
 

@@ -79,3 +79,5 @@ function isUser(data: unknown): data is User {
 }
 
 see doc -> typescriptlang.org
+
+http://typehero.dev ts challenges

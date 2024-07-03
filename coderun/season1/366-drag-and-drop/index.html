@@ -1,0 +1,212 @@
+<!DOCTYPE html>
+<html>
+<head>
+<title>Почта с тегами</title>
+<meta charset='utf-8'>
+<style>
+  .Page {
+    font-family: Arial;
+    font-size: 12px;
+    margin: 0;
+    padding: 0;
+    color: #2f2d33;
+  }
+  .Logo {
+    font-size: 24px;
+    padding: 12px;
+    margin: 0;
+  }
+  .Main {
+    display: flex;
+  }
+  .Tags {
+    width: 25%;
+    background-color: #fffae5;
+    padding: 6px;
+  }
+  .Tags_dropzone {
+    background-color: #ffedba;
+  }
+  .Tags_dragovered {
+    background-color: #ffd98e;
+  }
+  .Tags_dragovered * {
+    pointer-events: none;
+  }
+  .Tag {
+    background-color: #ffc062;
+    color: #592400;
+    margin: 6px;
+    padding: 6px;
+    display: inline-block;
+  }
+  .Tag_dragged {
+    background-color: #ff9100;
+  }
+  .Tag_removed {
+    display: none;
+  }
+  .Letters {
+    width: 100%;
+    background-color: #91cfff;
+  }
+  .Letters_dropzone {
+    background-color: #4da0ff;
+  }
+  .Letter {
+    display: flex;
+    color: #00244d;
+    margin: 12px;
+    padding: 12px;
+    background-color: #e3f2fd;
+  }
+  .Letter_dragovered {
+    background-color: #006fed;
+  }
+  .Letter_dragovered * {
+    pointer-events: none;
+  }
+  .Letter__Title {
+    margin: 12px;
+  }
+</style>
+</head>
+
+<body class="Page">
+<script>
+  let data = window.data || {
+    tags: {
+      '1': 'важное',
+      '2': 'личное',
+      '3': 'рабочее',
+      '4': 'Проект X',
+      '5': 'Проект Y'
+    },
+    letters: [
+      {
+        id: '1',
+        title: 'Приглашение на день рождения',
+        tags: ['1', '2']
+      },
+      {
+        id: '2',
+        title: 'Ответ на ваш комментарий',
+        tags: ['2']
+      },
+      {
+        id: '3',
+        title: 'Резюме последней встречи про X',
+        tags: ['3', '4']
+      },
+      {
+        id: '4',
+        title: 'Расчётный лист',
+        tags: ['1', '3']
+      },
+      {
+        id: '5',
+        title: 'Нужна помощь с Y',
+        tags: ['3', '5']
+      },
+      {
+        id: '6',
+        title: 'Регулярная рассылка для клиентов',
+        tags: []
+      }
+    ]
+  }
+
+  function mapAndJoin(a, f, s = '') { return a.map(f).join(s) }
+  function buildHtml(data) {
+    return `
+      <div class="Main">
+        <div class="Tags" id="tags">
+          ${mapAndJoin(
+            Object.entries(data.tags),
+            ([id, title]) => buildTagHtml(id, title))}
+        </div>
+        <div class="Letters" id="letters">
+          ${mapAndJoin(
+            data.letters,
+            ({ id, title, tags }) => `
+              <div class="Letter" data-letter-id="${id}">
+                <div class="Letter__Title">${title}</div>
+                ${mapAndJoin(tags, (l) => buildTagHtml(l, data.tags[l]))}
+              </div>
+            `)}
+        </div>
+      </div>
+    `
+  }
+  function buildTagHtml(id, title) {
+    return `<div class="Tag" data-tag-id="${id}" draggable="true">${title}</div>`
+  }
+  document.body.innerHTML = buildHtml(data);
+
+  const tagsContainer = document.getElementById('tags');
+  const lettersContainer = document.getElementById('letters');
+  let draggedTag = null;
+
+  document.addEventListener('dragstart', (event) => {
+    if (event.target.classList.contains('Tag')) {
+      draggedTag = event.target;
+      draggedTag.classList.add('Tag_dragged');
+      lettersContainer.classList.add('Letters_dropzone');
+      if (draggedTag.parentElement.classList.contains('Letter')) {
+        tagsContainer.classList.add('Tags_dropzone');
+      }
+    }
+  });
+
+  document.addEventListener('dragend', () => {
+    if (draggedTag) {
+      draggedTag.classList.remove('Tag_dragged');
+      lettersContainer.classList.remove('Letters_dropzone');
+      tagsContainer.classList.remove('Tags_dropzone');
+      draggedTag = null;
+    }
+  });
+
+  document.addEventListener('dragover', (event) => {
+    event.preventDefault();
+    if (draggedTag) {
+      const target = event.target.closest('.Letter, .Tags');
+      if (target && target.classList.contains('Letter') && !target.querySelector(`.Tag[data-tag-id="${draggedTag.dataset.tagId}"]`)) {
+        target.classList.add('Letter_dragovered');
+      } else if (target && target.classList.contains('Tags') && !target.querySelector(`.Tag[data-tag-id="${draggedTag.dataset.tagId}"]`)) {
+        tagsContainer.classList.add('Tags_dragovered');
+      }
+    }
+  });
+
+  document.addEventListener('dragleave', (event) => {
+    const target = event.target.closest('.Letter, .Tags');
+    if (target && target.classList.contains('Letter')) {
+      target.classList.remove('Letter_dragovered');
+    } else if (target && target.classList.contains('Tags')) {
+      tagsContainer.classList.remove('Tags_dragovered');
+    }
+  });
+
+  document.addEventListener('drop', (event) => {
+    event.preventDefault();
+    if (draggedTag) {
+      const target = event.target.closest('.Letter, .Tags');
+      const origin = draggedTag.parentElement.closest('.Letter, .Tags');
+      if (target && target.classList.contains('Letter') && !target.querySelector(`.Tag[data-tag-id="${draggedTag.dataset.tagId}"]`)) {
+        target.appendChild(draggedTag);
+        if (origin && origin.classList.contains('Letter')) {
+          origin.querySelector(`.Tag[data-tag-id="${draggedTag.dataset.tagId}"]`)?.remove();
+        }
+      } else if (target && target.classList.contains('Tags') && !tagsContainer.querySelector(`.Tag[data-tag-id="${draggedTag.dataset.tagId}"]`)) {
+        tagsContainer.appendChild(draggedTag);
+      }
+      document.querySelectorAll('.Letter_dragovered').forEach(el => el.classList.remove('Letter_dragovered'));
+      tagsContainer.classList.remove('Tags_dragovered');
+    }
+  });
+
+  window.onSolutionReady && window.onSolutionReady();
+</script>
+</body>
+</html>
