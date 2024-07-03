@@ -1,0 +1,79 @@
+:root {
+    counter-reset: number;
+    --box: 140px; /* Добавляем переменную --box */
+}
+
+html,
+body {
+    font-family: Arial, sans-serif;
+
+    height: 100%;
+    margin: 0;
+    padding: 0;
+
+    background: lightskyblue;
+}
+
+h1 {
+    font-size: 26px;
+    line-height: 1;
+
+    margin: 0 0 20px;
+    padding: 20px 0 0;
+
+    text-align: center;
+}
+
+div {
+    font-size: 0;
+    line-height: 0;
+
+    box-sizing: border-box;
+    width: calc(2 * var(--box));
+    margin: 20px auto 0;
+    padding: 20px;
+
+    text-align: justify;
+
+    background: lavender;
+}
+
+div::after {
+    content: ""; /* Добавляем content */
+    display: inline-block;
+
+    width: 100%;
+    height: 0;
+    margin: 0;
+}
+
+a {
+    font-size: 16px;
+    line-height: 1;
+
+    position: relative; /* Добавляем позиционирование */
+
+    display: inline-block;
+
+    counter-increment: number;
+
+    color: purple;
+    border: 2px solid rosybrown;
+    background: antiquewhite;
+}
+
+a::after {
+    content: counter(number); /* Добавляем контент для счетчика */
+    position: absolute;
+    top: 4px;
+    left: 4px;
+
+    padding: 1px 2px;
+
+    background: white;
+}
+
+img {
+    display: inline-block; /* Устанавливаем inline-block для изображений */
+    width: 80px;
+}

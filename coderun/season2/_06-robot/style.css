@@ -1,0 +1,111 @@
+:root {
+    --black: #000000;
+    --dark-gray: #33373b;
+    --medium-gray: #5e6569;
+    --light-gray: #f1f1f1;
+    --white: #ffffff;
+    --red: #ff0000;
+}
+body {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    height: 100vh;
+    margin: 0;
+    background-color: var(--light-gray);
+}
+.cart {
+    position: relative;
+    width: 200px;
+    height: 250px;
+    background-color: var(--dark-gray);
+    border-radius: 10px;
+}
+.cart:before, .cart:after {
+    content: "";
+    position: absolute;
+    bottom: -25px;
+    width: 50px;
+    height: 50px;
+    background-color: var(--black);
+    border-radius: 50%;
+}
+.cart:before {
+    left: 25px;
+}
+.cart:after {
+    right: 25px;
+}
+.handle {
+    position: absolute;
+    top: -40px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 80px;
+    height: 60px;
+    background-color: var(--medium-gray);
+    border-radius: 20px;
+}
+.handle::before {
+    content: "";
+    position: absolute;
+    top: 10px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 60px;
+    height: 20px;
+    background-color: var(--white);
+    border-radius: 10px;
+}
+.stripe {
+    position: absolute;
+    top: 50px;
+    left: 10px;
+    right: 10px;
+    height: 10px;
+    background-color: var(--red);
+}
+.front {
+    position: absolute;
+    top: 100px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 140px;
+    height: 100px;
+    background-color: var(--medium-gray);
+    border-radius: 10px;
+}
+.front::before, .front::after {
+    content: "";
+    position: absolute;
+    width: 20px;
+    height: 60px;
+    background-color: var(--white);
+    top: 20px;
+    border-radius: 5px;
+}
+.front::before {
+    left: 20px;
+}
+.front::after {
+    right: 20px;
+}
+.antenna {
+    position: absolute;
+    top: -100px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 10px;
+    height: 60px;
+    background-color: var(--red);
+}
+.antenna::before {
+    content: "";
+    position: absolute;
+    top: -30px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 10px;
+    height: 30px;
+    background-color: var(--medium-gray);
+}

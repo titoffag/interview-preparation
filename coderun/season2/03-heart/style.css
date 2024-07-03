@@ -1,0 +1,47 @@
+:root {
+    --red: #ff0000;
+    --heart-size: 230px;
+}
+
+body {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    height: 100vh;
+    margin: 0;
+    background-color: #fff;
+}
+
+.heart {
+    position: relative;
+    width: var(--heart-size);
+    height: var(--heart-size);
+}
+
+.heart::before,
+.heart::after {
+    content: "";
+    position: absolute;
+    width: var(--heart-size);
+    height: var(--heart-size);
+    border-radius: 50%;
+    background-color: #ff0000;
+}
+
+.heart::before {
+    top: calc(-1 * var(--heart-size) / 2);
+    left: 0;
+}
+
+.heart::after {
+    top: 0;
+    left: calc(var(--heart-size) / 2);
+}
+
+.heart {
+    width: var(--heart-size);
+    height: var(--heart-size);
+    background-color: var(--red);
+    transform: rotate(-45deg);
+    margin-top: calc(var(--heart-size) / 2 + 100);
+}

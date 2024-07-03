@@ -1,0 +1,14 @@
+{"data":[
+    {"id":12,"type":"deleted","message":{"id":9,"chatId":3}},
+    {"id":1,"type":"new","message":{"id":1,"chatId":3,"body":"[request 0004]: /ping"}},
+    {"id":2,"type":"new","message":{"id":2,"chatId":1,"body":"[request 0001]: /ping"}},
+    {"id":11,"type":"new","message":{"id":10,"chatId":1,"body":"[error] stop system"}},
+    {"id":3,"type":"new","message":{"id":3,"chatId":3,"body":"[response 0004]: pong"}},
+    {"id":4,"type":"new","message":{"id":4,"chatId":1,"body":"[response 0002]: pong"}},
+    {"id":9,"type":"new","message":{"id":8,"chatId":1,"body":"[error] unexpected response 0003"}},
+    {"id":5,"type":"updated","message":{"id":2,"chatId":1,"body":"[request 0002]: /ping"}},
+    {"id":6,"type":"new","message":{"id":5,"chatId":2,"body":"[request 0003]: /ping"}},
+    {"id":10,"type":"new","message":{"id":9,"chatId":3,"body":"[delete]"}},
+    {"id":7,"type":"new","message":{"id":6,"chatId":1,"body":"[response 0003]: pong"}},
+    {"id":8,"type":"new","message":{"id":7,"chatId":3,"body":"[success] stop system"}}
+]}

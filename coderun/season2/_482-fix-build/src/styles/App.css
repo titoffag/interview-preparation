@@ -1,0 +1,21 @@
+@import url("Base.css");
+
+#container {
+  align-items: center;
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  justify-content: center;
+  width: 100vw;
+}
+
+img {
+  height: auto;
+  margin-bottom: -55px;
+  width: 70vw;
+}
+
+p {
+  color: white;
+  font-size: 32px;
+}

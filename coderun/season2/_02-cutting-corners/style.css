@@ -1,0 +1,29 @@
+:root {
+    --violet: #B6A4FF;
+    --green: #2AE881;
+}
+
+body {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    height: 100vh;
+    margin: 0;
+    background-color: white;
+}
+
+.triangle {
+    position: absolute;
+    width: 512px;
+    height: 512px;
+}
+
+.purple {
+    background-color: var(--violet);
+    clip-path: polygon(0 0, 0% 0, 100% 100%, 0 100%);
+}
+
+.green {
+    background-color: var(--green);
+    clip-path: polygon(0 0, 100% 0, 100% 100%, 0 0%);
+}

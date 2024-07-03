@@ -1,0 +1,30 @@
+<html>
+<head>
+    <link rel="stylesheet" type="text/css" href="style.css"/>
+</head>
+<body>
+<div class="container">
+    <div class="inputs">
+        <div class="input">
+            <label for="htmlInput">HTML as JSON</label>
+            <textarea id="htmlInput"></textarea>
+        </div>
+        <div class="input">
+            <label for="cssInput">CSS as JSON</label>
+            <textarea id="cssInput"></textarea>
+        </div>
+    </div>
+    <div class="results">
+        <div class="result">
+            <label>Как должно быть</label>
+            <div class="referenceOutput"></div>
+        </div>
+        <div class="result">
+            <label>Как у вас</label>
+            <div class="scriptOutput"></div>
+        </div>
+    </div>
+</div>
+<script src="./out/index.js" type="module"></script>
+</body>
+</html>

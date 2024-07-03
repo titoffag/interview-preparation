@@ -1,0 +1,33 @@
+div {
+    position: relative;
+    width: 180px;
+    height: 180px;
+    background: linear-gradient(90deg, #f7ebcc 50%, #654430 50%),
+                linear-gradient(#f7ebcc 50%, #654430 50%);
+    background-size: 90px 90px;
+    background-position: 0 0, 0 90px, 90px 0, 90px 90px;
+}
+
+div:before, div:after {
+    content: "";
+    position: absolute;
+    width: 40px;
+    height: 40px;
+    background: #5f5d5e;
+    border: 3px solid #252324;
+    border-radius: 50%;
+    box-sizing: border-box;
+}
+
+div:before {
+    top: 20px;
+    left: 20px;
+    border-width: 5px;
+}
+
+div:after {
+    bottom: 20px;
+    right: 20px;
+    border-width: 5px;
+}
+

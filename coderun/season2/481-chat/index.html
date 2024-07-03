@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Playground</title>
+</head>
+<body>
+</body>
+<script>
+    class Chat {
+        #socket = new WebSocket("ws://localhost:8081");
+
+        constructor(callback) {
+            this.#socket.onmessage = (event) => {
+                const incomingMessage = JSON.parse(event.data);
+
+                // Update
+                callback(incomingMessage)
+            };
+        }
+
+        // {[chatId: number]: Message[]}[]
+        renderMessages(messages) {
+            console.log(JSON.stringify(messages, null, 2))
+        }
+    }
+</script>
+<script src="solution.js"></script>
+</html>

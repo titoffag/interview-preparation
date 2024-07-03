@@ -1,0 +1,68 @@
+:root {
+    --color-black: #000000;
+    --color-white: #ffffff;
+}
+
+body, html {
+    height: 100%;
+    margin: 0;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    background: var(--color-white);
+}
+
+.container {
+    position: relative;
+    width: 512px;
+    height: 512px;
+}
+
+.square {
+    position: absolute;
+    transform: rotate(45deg);
+    mix-blend-mode: difference;
+}
+
+.large {
+    width: 70%;
+    height: 70%;
+    top: 15%;
+    left: 15%;
+}
+
+.medium {
+    width: 50%;
+    height: 50%;
+    top: 25%;
+    left: 25%;
+}
+
+.small {
+    width: 30%;
+    height: 30%;
+    top: 35%;
+    left: 35%;
+}
+
+.extra-small {
+    width: 20%;
+    height: 20%;
+    top: 40%;
+    left: 40%;
+}
+
+.tiny {
+    width: 10%;
+    height: 10%;
+    top: 45%;
+    left: 45%;
+}
+
+.black {
+    background: var(--color-black);
+}
+
+.white {
+    background: var(--color-white);
+}

@@ -1,0 +1,39 @@
+:root {
+    --color-white: #ffffff;
+    --color-red: #ff5f00;
+    --color-brown: #9d7b29;
+    --color-orange: #ffc701;
+    --color-yellow: #fce300;
+    --color-black: #201b10;
+    --color-lightbrown: #faf4ce;
+}
+
+body, html {
+    margin: 0;
+    padding: 0;
+    height: 100%;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    background-color: var(--color-white);
+}
+
+.container {
+    position: relative;
+    width: 512px;
+    height: 512px;
+    background-color: var(--color-lightbrown);
+    display: grid;
+    grid-template-columns: repeat(32, 16px); /* Assuming a 32x32 pixel art */
+    grid-template-rows: repeat(32, 16px);
+}
+
+.pixel {
+    width: 16px;
+    height: 16px;
+}
+
+.p1 { grid-column: 5; grid-row: 5; background-color: var(--color-yellow); }
+.p2 { grid-column: 6; grid-row: 5; background-color: var(--color-yellow); }
+.p3 { grid-column: 7; grid-row: 5; background-color: var(--color-yellow); }
+/* Continue for each pixel */
